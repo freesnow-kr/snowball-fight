@@ -61,22 +61,13 @@
   #coffee h3 { margin: 0 0 8px; font-size: 23px; letter-spacing: -0.5px; }
   #coffee p { margin: 0 0 14px; font-size: 14px; line-height: 1.55; color: #456; }
   #coffee p b { color: #2f6fd0; }
-  /* 녹는 얼음 조각 위의 펭귄 */
-  #scene { display: block; width: 100%; height: auto; margin: 0 0 6px; border-radius: 14px; background: linear-gradient(#cfe9ff, #eaf6ff 60%); }
-  #floe { transform-box: fill-box; transform-origin: center; transform: scaleX(0.4); }
-  #peng { transform-box: fill-box; transform-origin: 50% 100%; animation: wobble 1.4s ease-in-out infinite; }
-  #peng.scared { animation-duration: 0.7s; }
-  #peng.happy { animation: hop 0.5s ease-out 4; }
-  @keyframes wobble { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
-  @keyframes hop { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-16px); } }
-  .wave { animation: wave 3s ease-in-out infinite alternate; }
-  @keyframes wave { to { transform: translateX(-14px); } }
+  /* 녹는 얼음 조각 위의 펭귄 (게임 속 3D 펭귄을 그대로 씀) */
+  #scene { display: block; width: 100%; aspect-ratio: 2 / 1; margin: 0 0 6px; border-radius: 14px; background: linear-gradient(#bfe2ff, #eaf6ff 55%, #bfe2ff); }
   #iceText { font-size: 13px; font-weight: 800; color: #3a6f9e; margin-bottom: 14px; }
   #coffee a { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 54px; border-radius: 14px; background: #fee500;
     color: #191919; font-weight: 800; font-size: 17px; text-decoration: none; box-shadow: 0 3px 0 #d8c200; }
   #coffee small { display: block; margin-top: 12px; font-size: 12px; color: #789; }
   #coffeeClose { position: absolute; right: 10px; top: 10px; width: 40px; height: 40px; border-radius: 50%; border: 0; background: #fff; font-size: 18px; color: #345; cursor: pointer; z-index: 1; }
-  @media (prefers-reduced-motion: reduce) { #peng, .wave { animation: none !important; } }
   #start #coffeeStart { background: transparent; color: #ffe08a; font-weight: 700; font-size: 14px; padding: 4px; }
   #swap { top: calc(106px + env(safe-area-inset-top)); }
   /* 게임 중 맵 바꾸기 창 */
@@ -115,22 +106,7 @@
   <button id="coffeeClose" aria-label="닫기">✕</button>
   <h3>🐧 펭귄들을 지켜주세요</h3>
   <p>펭귄들이 뛰놀던 눈밭이 <b>지금도 녹고 있어요.</b><br>작은 서버 하나가 이 얼음을 버티고 있어요.</p>
-  <svg id="scene" viewBox="0 0 300 120" aria-hidden="true">
-    <rect y="84" width="300" height="36" fill="#4f9bd9"/>
-    <path class="wave" d="M0 88 q10 -5 20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 v32 h-320z" fill="#6cb2ea"/>
-    <g id="floe"><ellipse cx="150" cy="88" rx="110" ry="9" fill="#a9d4f5"/><ellipse cx="150" cy="83" rx="110" ry="9" fill="#fff"/></g>
-    <g id="peng">
-      <ellipse cx="142" cy="82" rx="6" ry="3" fill="#ff8a1f"/><ellipse cx="158" cy="82" rx="6" ry="3" fill="#ff8a1f"/>
-      <ellipse cx="130" cy="58" rx="5" ry="13" fill="#1f2a44" transform="rotate(20 130 58)"/>
-      <ellipse cx="170" cy="58" rx="5" ry="13" fill="#1f2a44" transform="rotate(-20 170 58)"/>
-      <ellipse cx="150" cy="56" rx="19" ry="26" fill="#1f2a44"/>
-      <ellipse cx="150" cy="62" rx="12" ry="18" fill="#fff"/>
-      <ellipse cx="150" cy="42" rx="12" ry="9" fill="#fff"/>
-      <circle cx="145" cy="41" r="2" fill="#123"/><circle cx="155" cy="41" r="2" fill="#123"/>
-      <path d="M146 45 h8 l-4 5z" fill="#ff8a1f"/>
-      <rect x="133" y="50" width="34" height="6" rx="3" fill="#ff7a1a"/><rect x="157" y="52" width="6" height="13" rx="3" fill="#ff7a1a"/>
-    </g>
-  </svg>
+  <canvas id="scene"></canvas>
   <div id="iceText">🧊 남은 얼음 40%</div>
   <a id="donate" href="https://qr.kakaopay.com/Ej7tKnWsB" target="_blank" rel="noopener">💛 카카오페이로 펭귄 지키기</a>
   <small>후원금은 모두 서버 유지에 쓰여요 · PC에서는 QR 코드가 열려요</small>
@@ -514,32 +490,72 @@ $('mapBtn').textContent = isTouch ? '🗺️ 맵' : '🗺️ 맵 (M)';
 $('mapBtn').onclick = () => toggleMapMenu();
 $('mapClose').onclick = () => toggleMapMenu(false);
 // 후원 창: 버튼을 눌렀을 때만 열림. 바깥이나 ✕ 누르면 닫힘
-// 열면 펭귄이 선 얼음 조각이 40%→22%로 천천히 녹고, 후원 버튼을 누르면 다시 커지며 펭귄이 기뻐함(실제 후원 여부와는 무관)
-let meltT = 0;
-const setIce = (pct, sec) => {
-  const floe = $('floe');
-  floe.style.transition = `transform ${sec}s ${sec > 3 ? 'linear' : 'cubic-bezier(.3,1.6,.5,1)'}`;
-  floe.style.transform = `scaleX(${pct / 100})`;
-};
+// 게임 속 펭귄이 녹아 가는 얼음 조각 위에서 휘청이고(40%→22%), 후원 버튼을 누르면 얼음이 커지며 펭귄이 폴짝(실제 후원 여부와는 무관)
+// 작은 3D 장면은 처음 열 때 만들고, 창이 열려 있을 때만 그린다
+const ice = { pct: 40, target: 40, t0: 0, happy: 0, r: null };
+function iceScene() {
+  const cv = $('scene'), r = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true });
+  r.setPixelRatio(Math.min(devicePixelRatio, 2));
+  const sc = new THREE.Scene(), cam = new THREE.PerspectiveCamera(30, 2, 0.1, 50);
+  cam.position.set(0, 2.6, 7.2); cam.lookAt(0, 0.9, 0);
+  sc.add(new THREE.HemisphereLight('#ffffff', '#8aa7c7', 1.4));
+  const sun = new THREE.DirectionalLight('#fff4e0', 1.5); sun.position.set(3, 6, 4); sc.add(sun);
+  const sea = new THREE.Mesh(new THREE.CircleGeometry(30, 48), new THREE.MeshToonMaterial({ color: '#4f9bd9' }));
+  sea.rotation.x = -Math.PI / 2; sc.add(sea);
+  const floe = new THREE.Group(), white = new THREE.MeshToonMaterial({ color: '#ffffff' });
+  floe.add(new THREE.Mesh(new THREE.CylinderGeometry(1, 1.08, 0.36, 9), white)); // 각진 얼음 조각
+  const side = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.06, 9), new THREE.MeshToonMaterial({ color: '#a9d4f5' }));
+  side.position.y = -0.12; floe.add(side);
+  sc.add(floe);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(1, 1.06, 40), new THREE.MeshBasicMaterial({ color: '#d6ecff', transparent: true }));
+  ring.rotation.x = -Math.PI / 2; ring.position.y = 0.01; sc.add(ring); // 퍼져 나가는 물결
+  const peng = buildPenguin(THREE, TEAM_COLORS[0]); sc.add(peng);
+  const P = peng.userData.parts, clock = new THREE.Clock();
+  return () => {
+    const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
+    const { clientWidth: w, clientHeight: h } = cv;
+    if (cv.width !== Math.round(w * r.getPixelRatio())) { r.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); }
+    ice.pct += (ice.target - ice.pct) * Math.min(1, dt * (ice.happy ? 6 : 1));
+    const k = 0.35 + ice.pct / 100 * 1.9; // 얼음 반지름
+    floe.scale.set(k, 1, k);
+    floe.position.y = 0.12 + Math.sin(t * 1.6) * 0.03;
+    const top = floe.position.y + 0.18, scared = !ice.happy && ice.pct < 30;
+    if (ice.happy) { // 폴짝폴짝, 날개 번쩍
+      ice.happy = Math.max(0, ice.happy - dt);
+      peng.position.y = top + Math.abs(Math.sin(t * 9)) * 0.45;
+      peng.rotation.z = 0;
+      P.flippers.forEach((f, i) => { f.rotation.z = (i ? 1 : -1) * (1.6 + Math.sin(t * 18) * 0.3); });
+    } else { // 균형 잡느라 휘청, 날개 파닥
+      const sp = scared ? 7 : 3.5, sw = Math.sin(t * sp);
+      peng.position.y = top;
+      peng.rotation.z = sw * (scared ? 0.16 : 0.08);
+      P.flippers.forEach((f, i) => { f.rotation.z = (i ? 1 : -1) * (0.5 + (i ? -sw : sw) * (scared ? 0.6 : 0.25)); });
+    }
+    const rp = (t * 0.5) % 1; // 물결
+    ring.scale.setScalar(k * (1.1 + rp * 0.9)); ring.material.opacity = 0.8 * (1 - rp);
+    r.render(sc, cam);
+  };
+}
+let iceDraw = null, meltT = 0, iceLoop = 0;
 const coffee = (open) => {
   $('coffee').classList.toggle('open', open);
   clearInterval(meltT);
-  if (!open) return;
-  let left = 40;
-  $('iceText').textContent = `🧊 남은 얼음 ${left}%`;
-  $('peng').className.baseVal = '';
-  setIce(40, 0);
-  requestAnimationFrame(() => requestAnimationFrame(() => setIce(22, 36)));
-  meltT = setInterval(() => {
-    if (left <= 22) return;
-    $('iceText').textContent = `🧊 남은 얼음 ${--left}%`;
-    if (left <= 30) $('peng').className.baseVal = 'scared'; // 얼음이 작아지면 더 휘청
-  }, 2000);
+  if (open) {
+    iceDraw ??= iceScene();
+    Object.assign(ice, { pct: 40, target: 40, happy: 0 });
+    $('iceText').textContent = '🧊 남은 얼음 40%';
+    meltT = setInterval(() => { // 2초에 1%씩 녹음
+      if (ice.target <= 22) return;
+      ice.target--;
+      $('iceText').textContent = `🧊 남은 얼음 ${ice.target}%`;
+    }, 2000);
+  }
+  clearInterval(iceLoop); // 열려 있을 때만 그림 (renderer 는 하나만 만들어 재사용)
+  if (open) iceLoop = setInterval(iceDraw, 1000 / 60);
 };
 $('donate').addEventListener('click', () => {
   clearInterval(meltT);
-  setIce(100, 1.2);
-  $('peng').className.baseVal = 'happy';
+  Object.assign(ice, { target: 100, happy: 2.4 });
   $('iceText').textContent = '❄️ 얼음이 다시 꽁꽁! 고마워요';
 });
 $('coffeeBtn').onclick = $('coffeeStart').onclick = () => coffee(true);
