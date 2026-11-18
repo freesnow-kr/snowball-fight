@@ -1,0 +1,4 @@
+.DS_Store
+.playwright-mcp/
+# 캐릭터 시안 이미지(작업 기록용, 로컬에만 보관)
+game_character_*.png

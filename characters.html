@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ko">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>캐릭터: 펭귄 보더</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #eef4f8; font-family: system-ui, sans-serif; }
+  h1 { position: fixed; left: 0; right: 0; top: 10px; margin: 0; text-align: center; font-size: 20px; color: #2b2b33; }
+</style>
+<h1>⛷️ 펭귄 보더 — 목도리 색으로 팀 구분 (앞 · 뒤)</h1>
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }</script>
+<script type="module">
+import * as THREE from 'three';
+import { buildPenguin } from './chars.js';
+
+// ?spin=0 이면 고정 각도(스크린샷용)
+const spin = new URLSearchParams(location.search).get('spin') !== '0';
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+document.body.prepend(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#eef4f8');
+const camera = new THREE.PerspectiveCamera(28, innerWidth / innerHeight, 0.1, 100);
+camera.position.set(0, 2.4, 11);
+camera.lookAt(0, 1.0, 0);
+scene.add(new THREE.HemisphereLight('#ffffff', '#b8c7d9', 1.6));
+const sun = new THREE.DirectionalLight('#ffffff', 1.5);
+sun.position.set(4, 10, 8); sun.castShadow = true;
+scene.add(sun);
+const ground = new THREE.Mesh(new THREE.CircleGeometry(14, 48).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: '#ffffff' }));
+ground.receiveShadow = true; scene.add(ground);
+
+// 오렌지 앞·뒤, 블루 앞·뒤
+const set = [['#ff7a2f', -0.35], ['#ff7a2f', Math.PI + 0.35], ['#2f7bff', -0.35], ['#2f7bff', Math.PI + 0.35]];
+const pens = set.map(([col, rot], i) => {
+  const p = buildPenguin(THREE, col);
+  p.position.x = (i - 1.5) * 1.9; p.rotation.y = rot;
+  scene.add(p);
+  return { p, rot };
+});
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+renderer.setAnimationLoop((t) => {
+  if (spin) for (const { p, rot } of pens) p.rotation.y = rot + Math.sin(t / 1500) * 0.6;
+  renderer.render(scene, camera);
+});
+</script>
+</html>
