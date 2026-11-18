@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="ko">
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover,user-scalable=no">
 <link rel="icon" href="/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/favicon.png">
 <meta name="description" content="지금 눈밭에 눈이 펑펑 ❄️ 펭귄들이 기다리고 있어요 ⛄">
@@ -20,6 +20,9 @@
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; font-family: system-ui, sans-serif;
     touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  /* iOS 는 touch-action 을 요소마다 따로 봄 → 모든 요소에서 브라우저 확대·두 번 탭 확대를 끔. 이름 입력칸만 탭으로 커서 이동 */
+  * { touch-action: none; -webkit-tap-highlight-color: transparent; }
+  input { touch-action: manipulation; }
   #hud { position: fixed; left: calc(12px + env(safe-area-inset-left)); top: calc(10px + env(safe-area-inset-top)); color: #123; font-weight: 700; font-size: 18px; text-shadow: 0 1px 0 #fff; pointer-events: none; white-space: pre-line; line-height: 1.35; }
   #board { position: fixed; right: calc(12px + env(safe-area-inset-right)); top: calc(10px + env(safe-area-inset-top)); background: #ffffffaa; border-radius: 8px; padding: 6px 12px; font-size: 14px; pointer-events: none; min-width: 120px; }
   #teams { position: fixed; left: 50%; top: calc(10px + env(safe-area-inset-top)); transform: translateX(-50%); display: flex; gap: 8px; align-items: center;
@@ -147,6 +150,23 @@ const $ = (id) => document.getElementById(id);
 const DEBUG = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) && new URLSearchParams(location.search).has('debug');
 let dbg = null;
 const isTouch = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
+// iOS Safari 는 user-scalable=no 를 무시해서, 조이스틱+버튼을 두 엄지로 같이 누르거나 버튼을 빠르게 연타하면 페이지가 확대됨.
+// 게임 화면은 줌을 막아 두어 손가락으로 다시 줄일 수도 없음 → 확대 제스처를 막고, 그래도 확대되면 원래 크기로 되돌림
+for (const t of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(t, (e) => e.preventDefault()); // Safari 두 손가락 확대
+document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
+let lastTouchEnd = 0;
+document.addEventListener('touchend', (e) => { // 두 번 탭 확대: 0.3초 안에 다시 뗀 탭의 기본 동작만 막음(입력칸 제외)
+  const now = performance.now();
+  if (now - lastTouchEnd < 300 && e.target.tagName !== 'INPUT') e.preventDefault();
+  lastTouchEnd = now;
+}, { passive: false });
+const viewportMeta = document.querySelector('meta[name=viewport]'), VIEWPORT = viewportMeta.content;
+function unzoom() { // 확대된 채면 viewport 설정을 잠깐 바꿨다 되돌려 배율 1로 (iOS 가 다시 계산함)
+  if (!window.visualViewport || visualViewport.scale <= 1.01) return;
+  viewportMeta.content = VIEWPORT + ',minimum-scale=1';
+  requestAnimationFrame(() => { viewportMeta.content = VIEWPORT; scrollTo(0, 0); });
+}
+window.visualViewport?.addEventListener('resize', unzoom);
 if (isTouch) document.body.classList.add('touch');
 
 // ---------- 장면 ----------
