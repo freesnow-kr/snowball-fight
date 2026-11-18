@@ -67,8 +67,10 @@ export function blocksBall(m, x, y, z) {
 // 몸(반지름 rad)이 장애물과 겹치면 바깥으로 밀어낸 위치
 export function pushOut(m, x, z, rad = 0.4) {
   for (const o of m.obstacles) {
-    const dx = x - o.x, dz = z - o.z, d = Math.hypot(dx, dz), min = o.body + rad;
-    if (d < min && d > 1e-6) { x = o.x + (dx / d) * min; z = o.z + (dz / d) * min; }
+    let dx = x - o.x, dz = z - o.z, d = Math.hypot(dx, dz);
+    const min = o.body + rad;
+    if (d < 1e-6) { dx = d = 1e-6; dz = 0; } // 정확히 한가운데면 아무 쪽으로나
+    if (d < min) { x = o.x + (dx / d) * min; z = o.z + (dz / d) * min; }
   }
   return [x, z];
 }

@@ -325,6 +325,7 @@ function connect() {
 }
 function onMsg(m) {
   if (m.t === 'full') return flash('방이 모두 꽉 찼어요. 잠시 뒤 다시 들어가 볼게요', 4000);
+  if (m.t === 'pos') { Object.assign(me, { x: m.x, y: m.y, z: m.z, vy: 0, kx: 0, kz: 0, mvx: 0, mvz: 0 }); lastSent = ''; return; } // 서버가 이동을 거절 → 서버 위치로
   if (m.t === 'welcome') {
     for (const id of [...ents.keys()]) removeEnt(id);
     for (const id of [...balls.keys()]) removeBall(id);

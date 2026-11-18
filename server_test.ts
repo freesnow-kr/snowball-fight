@@ -84,3 +84,23 @@ Deno.test("장애물: 나무는 눈덩이를 막고, 몸은 나무 밖으로 밀
   const [x, z] = pushOut(room.map, t.x + 0.1, t.z);
   assert(Math.hypot(x - t.x, z - t.z) >= t.body + 0.4 - 1e-9, "몸이 나무 밖으로");
 });
+
+Deno.test("위치 보고: 정상 이동은 받고, 순간이동은 거절해 되돌리고, 땅 밑·장애물 안은 바로잡는다", () => {
+  const room = createRoom("forest");
+  const sent: string[] = [];
+  const a = join(room, { send: (s: string) => sent.push(s) }, "a");
+  place(a, 0, 0);
+  const move = (x: number, z: number, now: number, y = room.map.h(x, z)) => handle(a, { t: "p", x, y, z, yaw: 0 }, now);
+  a.moveT = 0;
+  for (let i = 1; i <= 15; i++) move(i * 0.48, 0, i * 66); // 달리기(초당 7.2m) 1초
+  assert(Math.abs(a.x - 7.2) < 0.01, `달리기 ${a.x}`);
+  sent.length = 0;
+  move(a.x + 3.5, 0, 15 * 66 + 66); // 한 번에 3.5m
+  assert(Math.abs(a.x - 7.2) < 0.01 && JSON.parse(sent.at(-1)!).t === "pos", "순간이동 거절 + 되돌림");
+  move(a.x, 0, 3000, -5);
+  assert(a.y === room.map.h(a.x, 0), `땅 밑 ${a.y}`);
+  const tree = room.map.obstacles.find((o) => o.kind === "tree")!;
+  place(a, tree.x + tree.body + 1, tree.z);
+  move(tree.x, tree.z, 5000);
+  assert(Math.hypot(a.x - tree.x, a.z - tree.z) >= tree.body + 0.39, "나무 안으로 못 들어감");
+});

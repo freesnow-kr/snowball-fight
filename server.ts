@@ -3,6 +3,7 @@
 import { blocksBall, MAPS, mapById, pushOut } from "./maps.js";
 
 const ARENA = 50, MAX_HUMANS = 30, MAX_AMMO = 10, HP = 3, G = -15, DT = 1 / 30, MAX_PILES = 40;
+const MOVE_SPEED = 8, MOVE_BURST = 3; // 위치 보고 검사: 초당 8m(달리기 7.2+여유)씩 쌓이는 이동 한도, 최대 3m까지 모아 둠(넉백·전송 지연)
 const TEAM_SIZE = 4; // 팀마다 사람+봇 최소 인원. 모자라면 봇이 채우고, 사람이 들어오면 봇이 빠진다
 export const ROUND_MS = 180_000, BREAK_MS = 6_000; // 한 판 3분, 결과 보여 주는 시간 6초
 const BOT_NAMES = ["눈송이", "고드름", "함박", "싸락", "서리", "눈보라", "진눈깨비", "얼음꽃", "눈꽃", "포근"];
@@ -21,6 +22,7 @@ export type P = {
   // score = 상대를 맞힌 횟수, freezes = 내가 언 횟수 (둘 다 한 판마다 0부터)
   hp: number; ammo: number; score: number; freezes: number; frozenUntil: number; gather: boolean; gatherT: number;
   lastThrow: number; roll: number; sock: Sock;
+  moveBudget: number; moveT: number; // 이번 보고에서 움직여도 되는 거리(m)와 마지막 보고 시각
   strafe: number; strafeUntil: number; throwAt: number; // 봇 전용
 };
 type Ball = { id: number; owner: number; team: number; x: number; y: number; z: number; vx: number; vy: number; vz: number; age: number };
@@ -59,12 +61,14 @@ function spawnAt(p: P) {
   p.z = Math.random() * 20 - 5;
   p.y = p.room.map.h(p.x, p.z);
   p.yaw = -side * Math.PI / 2;
+  p.moveBudget = MOVE_BURST;
+  p.moveT = Date.now();
 }
 
 function addPlayer(room: Room, sock: Sock, name: string, team: number, bot: boolean): P {
   const p: P = {
     id: nextId++, name, team, bot, room, x: 0, y: 0, z: 0, yaw: 0, hp: HP, ammo: MAX_AMMO, score: 0, freezes: 0,
-    frozenUntil: 0, gather: false, gatherT: 0, lastThrow: 0, roll: 0, sock,
+    frozenUntil: 0, gather: false, gatherT: 0, lastThrow: 0, roll: 0, sock, moveBudget: MOVE_BURST, moveT: 0,
     strafe: 1, strafeUntil: 0, throwAt: Date.now() + 1000 + Math.random() * 2000,
   };
   spawnAt(p);
@@ -125,11 +129,20 @@ export function handle(p: P, m: any, now = Date.now()) {
     case "p": {
       const x = num(m.x, -ARENA, ARENA), y = num(m.y, -10, 60), z = num(m.z, -ARENA, ARENA), yaw = num(m.yaw, -1e4, 1e4);
       if (frozen || x === null || y === null || z === null || yaw === null) return;
-      const step = Math.hypot(x - p.x, z - p.z);
-      // ponytail: 이동은 클라이언트를 믿고 순간이동만 막음. 치트까지 막으려면 서버가 키 입력으로 이동을 계산해야 함
-      if (step > 4) return;
+      // 마지막 보고 뒤 흐른 시간만큼 이동 한도가 쌓인다. 한도보다 멀리 가면 거절하고 서버 위치로 되돌림
+      p.moveBudget = Math.min(MOVE_BURST, p.moveBudget + MOVE_SPEED * Math.max(0, now - p.moveT) / 1000);
+      p.moveT = now;
+      const [cx, cz] = pushOut(room.map, x, z); // 나무·바위·오두막 안으로는 못 들어감
+      const step = Math.hypot(cx - p.x, cz - p.z);
+      if (step > p.moveBudget) {
+        p.sock.send(JSON.stringify({ t: "pos", x: p.x, y: p.y, z: p.z }));
+        return;
+      }
+      p.moveBudget -= step;
+      // ponytail: 장애물은 끝점만 밀어냄. 한 번에 최대 3m라 얇은 통나무를 건너뛸 수는 있음. 막으려면 이동 선분으로 검사
       if (p.roll) p.roll = Math.min(1.2, p.roll + step * 0.03);
-      Object.assign(p, { x, y, z, yaw });
+      const gy = room.map.h(cx, cz); // 땅 밑·공중 부양 방지 (점프 최고 높이는 약 1.3m)
+      Object.assign(p, { x: cx, y: Math.min(Math.max(y, gy), gy + 2), z: cz, yaw });
       return;
     }
     case "g":
