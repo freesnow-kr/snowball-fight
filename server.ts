@@ -312,6 +312,7 @@ if (import.meta.main) {
     "/chars.js": ["./chars.js", "text/javascript"],
     "/maps.js": ["./maps.js", "text/javascript"],
     "/favicon.png": ["./favicon.png", "image/png"],
+    "/og.jpg": ["./og.jpg", "image/jpeg"],
   };
   Deno.serve({ port: Number(Deno.env.get("PORT") ?? 8000) }, async (req) => {
     const path = new URL(req.url).pathname;
