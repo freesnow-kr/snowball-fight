@@ -1,6 +1,6 @@
 # 슬로프 눈싸움 ⛷️
 
-브라우저에서 바로 하는 3D 팀 눈싸움. 펭귄 보더가 되어 🟠 오렌지팀 vs 🔵 블루팀으로 3분씩 겨룹니다. PC·모바일 모두 지원.
+브라우저에서 바로 하는 3D 팀 눈싸움. 펭귄 보더가 되어 💗 핑크팀 vs 🔵 블루팀으로 3분씩 겨룹니다. PC·모바일 모두 지원.
 
 ## 실행
 
@@ -13,6 +13,15 @@ deno test server_test.ts   # 서버 규칙 테스트
 ```
 
 같은 와이파이의 친구는 `http://<내 IP>:8000` 으로 들어옵니다.
+
+### 개발용 (배포 서버에선 꺼져 있음)
+
+```sh
+DEV=1 deno run --allow-net --allow-read --allow-env server.ts           # 개발 명령(판 바로 끝내기) 허용
+DEV=1 LAG=80 deno run --allow-net --allow-read --allow-env server.ts    # 주고받는 메시지마다 0.08초 지연(왕복 0.16초) 흉내
+```
+
+`http://localhost:8000/?debug` 로 열면 디버그 패널(`debug.js`)이 뜹니다: 명중 판정 구·모델 경계·눈덩이 궤적·명중 위치 표시, 화면↔서버 명중 일치 통계, 판 끝내기(우리 승·상대 승·무승부)·내 승리 동작, 캐릭터 수·눈덩이·파티클 부하, 5초 성능 측정(fps·1% low·JS·GPU 시간·draw call·삼각형·메모리). localhost 가 아니면 `?debug` 를 붙여도 안 뜹니다.
 
 ## 배포 (Render)
 
@@ -42,4 +51,5 @@ deno test server_test.ts   # 서버 규칙 테스트
 - `server.ts` — 방(맵)별 게임 상태, 명중 판정, 봇, 판 진행, WebSocket
 - `index.html` — 화면(three.js), 조작, 예측(내 눈덩이는 바로 보임)
 - `maps.js` — 지형 높이·장애물. 서버와 화면이 같은 파일을 써서 어긋나지 않음
-- `chars.js` — 펭귄 캐릭터 모델 (`characters.html` 에서 미리보기)
+- `penguin.js` + `assets/penguin_blue.glb` — 펭귄 캐릭터(GLB 1개로 팀 색·표정 6종·동작 9종). 모델은 `blender/build_penguin.py` 로 다시 만듦, `blender/glb-check.html` 에서 검증·미리보기
+- `chars.js` — 예전 코드 펭귄(지금 게임에선 안 씀, `characters.html` 미리보기용)

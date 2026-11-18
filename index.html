@@ -24,7 +24,7 @@
   #board { position: fixed; right: calc(12px + env(safe-area-inset-right)); top: calc(10px + env(safe-area-inset-top)); background: #ffffffaa; border-radius: 8px; padding: 6px 12px; font-size: 14px; pointer-events: none; min-width: 120px; }
   #teams { position: fixed; left: 50%; top: calc(10px + env(safe-area-inset-top)); transform: translateX(-50%); display: flex; gap: 8px; align-items: center;
     background: #ffffffcc; border-radius: 20px; padding: 4px 14px; font-weight: 800; font-size: 18px; pointer-events: none; white-space: nowrap; }
-  #teams .t0 { color: #e8622c; } #teams .t1 { color: #2f6fd0; } #teams .mine { text-decoration: underline 3px; }
+  #teams .t0 { color: #e0478f; } #teams .t1 { color: #2f6fd0; } #teams .mine { text-decoration: underline 3px; }
   #teams .time { font-size: 14px; color: #345; font-weight: 700; margin-left: 4px; }
   #banner { position: fixed; left: 50%; top: 40%; transform: translate(-50%, -50%); font-size: 34px; font-weight: 900; color: #fff;
     text-shadow: 0 3px 8px #000a; pointer-events: none; text-align: center; width: 90%; white-space: pre-line; }
@@ -133,15 +133,19 @@
     <button type="button" id="coffeeStart">🐧 펭귄들을 지켜주세요</button>
   </form>
 </div>
-<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }</script>
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/" } }</script>
 <script type="module">
 import * as THREE from 'three';
-import { buildPenguin } from './chars.js';
-import { blocksBall, MAPS, mapById, pushOut } from './maps.js';
+import { loadPenguin, Penguin } from './penguin.js';
+import { blocksBall, hitsPenguin, MAPS, mapById, pushOut } from './maps.js';
 
-const TEAM_COLORS = ['#ff7a2f', '#2f7bff'], TEAM_NAMES = ['🟠 오렌지팀', '🔵 블루팀'], TEAM_DOTS = ['🟠', '🔵'];
+const TEAM_COLORS = ['#ff65a8', '#2f7bff'], TEAM_NAMES = ['💗 핑크팀', '🔵 블루팀'], TEAM_DOTS = ['💗', '🔵'];
+const EMOTE_FACE = ['excited', 'excited', 'focused', 'heart', 'wink', 'normal']; // 이모트(👋😂😡❤️😎🙏) 동안 얼굴
 const ARENA = 50, MAX_AMMO = 10, G = -15, EMOTES = ['👋', '😂', '😡', '❤️', '😎', '🙏'];
 const $ = (id) => document.getElementById(id);
+// 개발용 디버그(히트박스·궤적·판 끝내기·성능 측정): localhost 에서 ?debug 일 때만 debug.js 를 불러옴
+const DEBUG = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) && new URLSearchParams(location.search).has('debug');
+let dbg = null;
 const isTouch = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
 if (isTouch) document.body.classList.add('touch');
 
@@ -260,7 +264,7 @@ function textSprite(text, px = 40, fill = '#fff') {
 const sphere = (r, ...a) => new THREE.SphereGeometry(r, 16, 12, ...a);
 // 얼음 껍질: 펭귄 실루엣(몸·머리·목도리)을 바깥에서 따라 감싸는 각진 얼음. 모든 펭귄이 같은 모양을 같이 씀
 // 중심에서 사방으로 광선을 쏘아 펭귄을 이루는 구들의 바깥 면까지 거리 + 여유 → 꼭짓점을 조금씩 흔들어 크리스털 면처럼
-const ICE_SHAPE = [[0, 0.64, 0, 0.56], [0, 1.34, 0, 0.53], [0, 1.0, 0, 0.5]]; // 몸·머리·목도리 [x,y,z,반지름] (chars.js 펭귄 크기)
+const ICE_SHAPE = [[0, 0.58, 0, 0.74], [0, 1.28, 0, 0.64], [0, 1.78, 0, 0.3]]; // 몸·팔 / 머리·고글 / 비니·방울 [x,y,z,반지름] (penguin.js 2m 펭귄 크기)
 const iceShellGeo = (() => {
   const geo = new THREE.IcosahedronGeometry(1, 1), pos = geo.attributes.position, c = new THREE.Vector3(0, 0.95, 0); // 면을 크게 나눠 각지게
   let seed = 3; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
@@ -292,21 +296,23 @@ function makeIce() {
   ice.add(line, shell);
   for (const [x, y, rz, h] of [[-0.2, 1.15, -0.5, 0.9], [0.05, 1.05, -0.5, 0.55]]) { // 앞면 반사 줄
     const g = new THREE.Mesh(new THREE.BoxGeometry(0.05, h, 0.01), iceGlintM);
-    g.position.set(x, y, 0.72); g.rotation.z = rz; g.renderOrder = 6; ice.add(g);
+    g.position.set(x, y, 0.86); g.rotation.z = rz; g.renderOrder = 6; ice.add(g);
   }
   const base = add(ice, new THREE.DodecahedronGeometry(0.85), iceBaseM, 0, 0.05, 0); base.scale.set(1, 0.14, 0.9); // 바닥 진한 얼음
   ice.visible = false;
   return ice;
 }
-// 캐릭터: 모두 같은 펭귄, 목도리 색 = 팀 색 (chars.js). 3번 맞아 얼면 얼음 덩어리에 갇힌다
+// 캐릭터: 모두 같은 펭귄 GLB, 점퍼·비니·고글 끈 색 = 팀 색 (penguin.js). 3번 맞아 얼면 얼음 덩어리에 갇힌다
+loadPenguin().catch((err) => flash('캐릭터 모델을 못 불러왔어요. 새로고침해 주세요', 6000) || console.error(err)); // 입장 화면 동안 미리 받아 둠(한 번만)
 function makeChar(name, team) {
-  const g = new THREE.Group(), ice = makeIce();
-  const body = buildPenguin(THREE, TEAM_COLORS[team] ?? '#888');
+  const g = new THREE.Group(), ice = makeIce(), body = new THREE.Group();
   const ball = add(g, sphere(1), M.white); ball.visible = false;
-  const tag = textSprite(name, 40, ['#ffc9a8', '#b9d4ff'][team] ?? '#fff'); tag.position.y = 2.55;
+  const tag = textSprite(name, 40, ['#ffc6df', '#b9d4ff'][team] ?? '#fff'); tag.position.y = 2.55;
   const emo = textSprite('', 48); emo.position.y = 3.15; emo.visible = false;
   g.add(body, ice, tag, emo); scene.add(g);
-  return { g, body, ice, ball, tag, emo };
+  const c = { g, body, ice, ball, tag, emo, peng: null };
+  loadPenguin().then((a) => { if (!c.gone) { c.peng = new Penguin(a, team); body.add(c.peng.root); } });
+  return c;
 }
 
 // ---------- 상태 ----------
@@ -323,8 +329,9 @@ function addEnt(id, name, team, bot) {
   const c = makeChar(name, team);
   if (id === myId) c.tag.visible = false;
   ents.set(id, { c, name, team, bot, buf: [], vx: 0, vz: 0, spd: 0, throwT: 0, gather: 0, phase: 0, x: null, y: 0, z: 0, yaw: 0, tx: 0, ty: 0, tz: 0, tyaw: 0, frozen: 0, roll: 0, hp: 3, ammo: 5, score: 0, emoUntil: 0 });
+  dbg?.onEnt(ents.get(id));
 }
-function removeEnt(id) { const e = ents.get(id); if (e) { scene.remove(e.c.g); ents.delete(id); } }
+function removeEnt(id) { const e = ents.get(id); if (e) { e.c.gone = true; e.c.peng?.dispose(); scene.remove(e.c.g); ents.delete(id); } }
 function removeBall(id) { const b = balls.get(id); if (b) { scene.remove(b.mesh); balls.delete(id); } }
 function setPile(p) {
   piles.get(p.id) && scene.remove(piles.get(p.id));
@@ -365,6 +372,7 @@ function connect() {
   ws.onclose = () => { flash('연결이 끊겼어요. 다시 접속하는 중…', backoff + 500); setTimeout(connect, backoff); backoff = Math.min(backoff * 2, 10000); };
 }
 function onMsg(m) {
+  if (m.t === 'ping') return send({ t: 'pong', ts: m.ts }); // 서버가 왕복 시간을 재서 명중 되감기에 씀
   if (m.t === 'full') return flash('방이 모두 꽉 찼어요. 잠시 뒤 다시 들어가 볼게요', 4000);
   if (m.t === 'pos') { Object.assign(me, { x: m.x, y: m.y, z: m.z, vy: 0, kx: 0, kz: 0, mvx: 0, mvz: 0 }); lastSent = ''; return; } // 서버가 이동을 거절 → 서버 위치로
   if (m.t === 'welcome') {
@@ -407,15 +415,20 @@ function onEv(ev) {
       if (owner === myId && mySeqs.delete(s)) { // 내가 예측해서 이미 띄운 눈덩이: 서버 번호로 이어 붙임
         const b = balls.get(-s);
         if (b) { balls.delete(-s); balls.set(id, b); }
+        if (visHit.delete(-s)) visHit.add(id); // 내 화면에서 이미 맞아 터진 눈덩이
+        dbg?.rekey(-s, id);
         break;
       }
       if (ents.has(owner)) ents.get(owner).throwT = performance.now(); // 던지는 동작
-      balls.set(id, { mesh: add(scene, ballGeo, M.white), x, y, z, vx, vy, vz, age: 0 });
+      balls.set(id, { mesh: add(scene, ballGeo, M.white), x, y, z, vx, vy, vz, age: 0, owner, hand: true });
       break;
     }
     case 'hit': {
       const [, id, x, y, z, target, kx, kz] = ev;
-      removeBall(id); puff(x, y, z, 14);
+      removeBall(id);
+      if (!visHit.delete(id)) puff(x, y, z, 14); // 내 화면에서 먼저 터뜨렸으면 한 번만
+      dbg?.onHit(id, x, y, z, target);
+      if (ents.has(target)) ents.get(target).hitT = performance.now(); // 맞는 동작·놀란 얼굴
       if (target === myId) { me.kx += kx; me.kz += kz; me.vy = Math.max(me.vy, 4); shake = 0.35; sfx(160, 0.2, 0.25); }
       else sfx(260, 0.12, 0.08);
       break;
@@ -424,6 +437,7 @@ function onEv(ev) {
     case 'over': {
       const [, w, a, b] = ev, my = ents.get(myId)?.team;
       const mine = ents.get(myId);
+      if (w >= 0) for (const e of ents.values()) if (e.team === w) e.victoryUntil = performance.now() + 5500; // 이긴 팀은 승리 동작
       banner((w < 0 ? `무승부! ${a} : ${b}` : `${TEAM_NAMES[w]} 승리! ${a} : ${b}${w === my ? ' 🎉' : ''}`)
         + `\n이번 판 내 기록: 🎯 맞힘 ${mine?.score ?? 0} · 🥶 얼음 ${mine?.freezes ?? 0}`, 5500);
       sfx(w === my ? 660 : 220, 0.5, 0.2);
@@ -436,6 +450,7 @@ function onEv(ev) {
       const e = ents.get(ev[1]); if (!e) break;
       const s = textSprite(EMOTES[ev[2]], 48); s.position.y = 3.15;
       e.c.g.remove(e.c.emo); e.c.emo = s; e.c.g.add(s); e.emoUntil = performance.now() + 2000;
+      e.c.peng?.setExpression(EMOTE_FACE[ev[2]], 2000);
       break;
     }
   }
@@ -444,7 +459,7 @@ const banner = (text, ms) => { $('banner').textContent = text; bannerUntil = per
 const span = (cls, text) => { const e = document.createElement('span'); e.className = cls; e.textContent = text; return e; };
 function drawTeams(ts, tl) {
   const my = ents.get(myId)?.team, mm = Math.floor(tl / 60), ss = String(tl % 60).padStart(2, '0');
-  $('teams').replaceChildren(span('t0' + (my === 0 ? ' mine' : ''), `🟠 ${ts[0]}`), span('', ':'),
+  $('teams').replaceChildren(span('t0' + (my === 0 ? ' mine' : ''), `${TEAM_DOTS[0]} ${ts[0]}`), span('', ':'),
     span('t1' + (my === 1 ? ' mine' : ''), `${ts[1]} 🔵`), span('time', roundBreak ? '쉬는 중' : `${mm}:${ss}`));
 }
 function drawBoard() {
@@ -521,8 +536,9 @@ function iceScene() {
   sc.add(floe);
   const ring = new THREE.Mesh(new THREE.RingGeometry(1, 1.06, 40), new THREE.MeshBasicMaterial({ color: '#d6ecff', transparent: true }));
   ring.rotation.x = -Math.PI / 2; ring.position.y = 0.01; sc.add(ring); // 퍼져 나가는 물결
-  const peng = buildPenguin(THREE, TEAM_COLORS[0]); sc.add(peng);
-  const P = peng.userData.parts, clock = new THREE.Clock();
+  const peng = new THREE.Group(); sc.add(peng);
+  let pp = null; loadPenguin().then((a) => { pp = new Penguin(a, 0); peng.add(pp.root); });
+  const clock = new THREE.Clock();
   return () => {
     const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
     const { clientWidth: w, clientHeight: h } = cv;
@@ -532,17 +548,17 @@ function iceScene() {
     floe.scale.set(k, 1, k);
     floe.position.y = 0.12 + Math.sin(t * 1.6) * 0.03;
     const top = floe.position.y + 0.18, scared = !ice.happy && ice.pct < 30;
-    if (ice.happy) { // 폴짝폴짝, 날개 번쩍
+    peng.position.y = top;
+    if (ice.happy) { // 폴짝폴짝 승리 동작 + 신난 얼굴
       ice.happy = Math.max(0, ice.happy - dt);
-      peng.position.y = top + Math.abs(Math.sin(t * 9)) * 0.45;
       peng.rotation.z = 0;
-      P.flippers.forEach((f, i) => { f.rotation.z = (i ? 1 : -1) * (1.6 + Math.sin(t * 18) * 0.3); });
-    } else { // 균형 잡느라 휘청, 날개 파닥
-      const sp = scared ? 7 : 3.5, sw = Math.sin(t * sp);
-      peng.position.y = top;
+      pp?.play('victory'); pp?.setExpression('excited');
+    } else { // 균형 잡느라 휘청. 얼음이 작아지면 놀란 얼굴
+      const sw = Math.sin(t * (scared ? 7 : 3.5));
       peng.rotation.z = sw * (scared ? 0.16 : 0.08);
-      P.flippers.forEach((f, i) => { f.rotation.z = (i ? 1 : -1) * (0.5 + (i ? -sw : sw) * (scared ? 0.6 : 0.25)); });
+      pp?.play('idle'); pp?.setExpression(scared ? 'surprised' : 'normal');
     }
+    pp?.mixer.update(dt);
     const rp = (t * 0.5) % 1; // 물결
     ring.scale.setScalar(k * (1.1 + rp * 0.9)); ring.material.opacity = 0.8 * (1 - rp);
     r.render(sc, cam);
@@ -692,6 +708,7 @@ addEventListener('blur', () => { for (const k of [...keys]) release(k); });
 const THROW_CD = 260, RANGE = 30;
 let seq = 0, lastThrowAt = 0;
 const mySeqs = new Set(); // 서버 확인을 기다리는 내 눈덩이 번호
+const visHit = new Set(); // 내 화면에서 먼저 맞아 터진 눈덩이 번호(서버 'hit' 때 한 번 더 터뜨리지 않게)
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), tmp = new THREE.Vector3();
 const enemies = () => { const my = ents.get(myId)?.team; return [...ents].filter(([id, e]) => id !== myId && e.x !== null && !e.frozen && e.team !== my).map(([, e]) => e); };
 // 움직이는 상대는 눈덩이가 날아가는 동안 갈 자리를 앞질러 노린다(최대 4m)
@@ -750,31 +767,21 @@ function throwAt(p) {
   mySeqs.add(seq);
   send({ t: 'th', vx: v.vx, vy: v.vy, vz: v.vz, s: seq });
   // 서버 확인을 기다리지 않고 내 화면에 바로 띄움(예측). 서버가 같은 번호로 확인하면 그 눈덩이로 이어짐
-  balls.set(-seq, { mesh: add(scene, ballGeo, M.white), x: v.ox, y: v.oy, z: v.oz, vx: v.vx, vy: v.vy, vz: v.vz, age: 0 });
+  balls.set(-seq, { mesh: add(scene, ballGeo, M.white), x: v.ox, y: v.oy, z: v.oz, vx: v.vx, vy: v.vy, vz: v.vz, age: 0, owner: myId, hand: true });
   e.ammo--;
   lastThrowAt = e.throwT = now;
   sfx(520, 0.08, 0.1);
 }
 
-// ---------- 동작: 뒤뚱 걷기·달리기, 던지기(오른 날개), 모으기(웅크려 떠내기), 공중(날개 펼침), 숨쉬기 ----------
+// ---------- 동작: GLB 애니메이션(Idle·Walk·Run·Jump·Gather·Roll·Throw·Hit·Victory) + 표정. 고르는 규칙은 penguin.js drive ----------
 function animate(e, now, dt) {
-  const b = e.c.body, P = b.userData.parts, [lf, rf] = P.flippers;
-  const moving = e.spd > 0.4 && !e.frozen, running = e.spd > 5.5, air = e.y - H(e.x, e.z) > 0.3;
-  const gather = e.gather && !e.frozen, thrown = (now - e.throwT) / 350;
-  e.phase += dt * (moving ? 5 + e.spd * 1.6 : 0);
-  const sw = Math.sin(e.phase), step = moving ? 1 : 0;
-  b.rotation.z = sw * step * (running ? 0.16 : 0.12);              // 좌우로 뒤뚱
-  b.rotation.x = running ? 0.18 : moving ? 0.06 : 0;               // 달리면 앞으로 기울임
-  b.position.y = Math.abs(sw) * step * 0.06;
-  b.scale.y = gather ? 0.82 : 1 + Math.sin(now / 600) * 0.012 * (1 - step); // 모으면 웅크림, 서 있으면 숨쉬기
-  P.feet[0].position.z = 0.12 + sw * step * 0.14; P.feet[1].position.z = 0.12 - sw * step * 0.14;
-  P.feet[0].position.y = 0.05 + Math.max(0, sw) * step * 0.08; P.feet[1].position.y = 0.05 + Math.max(0, -sw) * step * 0.08;
-  // 날개: + 는 뒤로, - 는 앞·위로
-  let lx = -sw * step * 0.5, rx = sw * step * 0.5, out = air ? 1 : 0;
-  if (gather) lx = rx = -0.9 + Math.sin(now / 90) * 0.4;
-  if (thrown < 1) rx = thrown < 0.3 ? 1.2 * (thrown / 0.3) : 1.2 - 3.6 * ((thrown - 0.3) / 0.7); // 뒤로 젖혔다 앞으로 휙
-  if (e.frozen) lx = rx = out = 0;
-  lf.rotation.set(lx, 0, -0.3 - out); rf.rotation.set(rx, 0, 0.3 + out);
+  const p = e.c.peng; if (!p) return; // 모델을 아직 받는 중
+  p.drive({
+    moving: e.spd > 0.4 && !e.frozen, running: e.spd > 5.5, air: e.y - H(e.x, e.z) > 0.3,
+    gather: e.gather && !e.frozen, roll: e.roll > 0, frozen: !!e.frozen,
+    throwAt: e.throwT, hitAt: e.hitT ?? -1e9, victory: now < (e.victoryUntil ?? 0),
+    speedK: e.spd / (e.spd > 5.5 ? 7.2 : 4.4), // 걷기 4.4·달리기 7.2 m/s 기준으로 발걸음 속도
+  }, now, dt);
 }
 // 남의 위치: 0.11초 전 시점을 쌓아 둔 두 위치 사이로 이어 그리고, 새 위치가 늦으면 속도로 조금(최대 0.15초) 앞서 그림
 // ponytail: 받은 시각 기준이라 네트워크가 크게 흔들리면 살짝 떨림. 심하면 서버 시각을 스냅샷에 실어 맞추기
@@ -806,6 +813,7 @@ const clock = new THREE.Clock(), camT = new THREE.Vector3();
 const wrap = (a) => ((a + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05), now = performance.now(), t = now / 1000;
+  dbg?.frameStart(now);
   const mine = ents.get(myId);
 
   // 내 이동 (클라이언트에서 계산, 서버에 위치 보고)
@@ -841,6 +849,8 @@ renderer.setAnimationLoop(() => {
   for (const [id, e] of ents) {
     if (id !== myId) sample(e, now);
     if (e.x === null) continue;
+    if (dbg?.hidden(e)) { e.c.g.visible = false; continue; } // 디버그: 캐릭터 수 줄여 성능 비교
+    e.c.g.visible = true;
     animate(e, now, dt);
     const c = e.c;
     c.g.position.set(e.x, e.y, e.z); c.g.rotation.y = e.yaw;
@@ -852,9 +862,21 @@ renderer.setAnimationLoop(() => {
   }
 
   for (const [id, b] of balls) {
+    const ax = b.x, ay = b.y, az = b.z;
     b.vy += G * dt; b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt; b.age += dt;
-    b.mesh.position.set(b.x, b.y, b.z);
-    if (b.y < H(b.x, b.z) || blocksBall(map, b.x, b.y, b.z)) { puff(b.x, b.y, b.z, 6); removeBall(id); } // 서버 확인 전에 내 화면에서 먼저 착지·충돌
+    // 보이는 위치: 서버 눈덩이(b.x..)는 발 위 1.5m·앞 0.6m 에서 나가지만, 처음 0.15초는 던지는 날개 끝에서 출발해 그 궤도로 합쳐지게
+    if (b.hand) { b.hand = false; const hp = ents.get(b.owner)?.c.peng?.hand(tmp); if (hp) { b.off = [hp.x - b.x, hp.y - b.y, hp.z - b.z]; b.age0 = b.age; } }
+    const k = b.off ? Math.max(0, 1 - (b.age - b.age0) / 0.15) : 0, kk = k * k * (3 - 2 * k);
+    b.mesh.position.set(b.x + (b.off?.[0] ?? 0) * kk, b.y + (b.off?.[1] ?? 0) * kk, b.z + (b.off?.[2] ?? 0) * kk);
+    dbg?.onBall(id, b);
+    // 화면에서 먼저 맞히기: 서버와 같은 판정(maps.js hitsPenguin)으로, 내 화면에 보이는 상대 위치에 닿으면 바로 터뜨림
+    // (점수·체력은 서버 'hit' 만 바꿈. 서버는 사람 공을 0.2초 전 위치로도 판정해서 화면과 같은 결과가 남)
+    const team = ents.get(b.owner)?.team;
+    let hitE = null;
+    if (team !== undefined) for (const e of ents.values()) if (e.team !== team && !e.frozen && e.x !== null && hitsPenguin(ax, ay, az, b.x, b.y, b.z, e.x, e.y, e.z)) { hitE = e; break; }
+    if (hitE) { puff(b.x, b.y, b.z, 14); visHit.add(id); if (visHit.size > 64) visHit.delete(visHit.values().next().value); // 서버가 끝내 빗나감이라 하면 남는 번호는 오래된 것부터 버림
+      dbg?.onPredict(id, b, hitE); removeBall(id); }
+    else if (b.y < H(b.x, b.z) || blocksBall(map, b.x, b.y, b.z)) { puff(b.x, b.y, b.z, 6); removeBall(id); } // 서버 확인 전에 내 화면에서 먼저 착지·충돌
     else if (b.age > 4) removeBall(id); // 서버도 4초 후 조용히 지움
   }
   for (let i = parts.length - 1; i >= 0; i--) {
@@ -889,6 +911,8 @@ renderer.setAnimationLoop(() => {
   $('msg').textContent = mine?.frozen ? '🧊 꽁꽁 얼었어요! 3초 뒤 풀려요'
     : now < flashUntil ? flashText : '';
   renderer.render(scene, camera);
+  dbg?.frameEnd(now);
 });
+if (DEBUG) import('./debug.js').then((m) => { dbg = m.initDebug({ THREE, scene, renderer, ents, balls, send, puff, add, ballGeo, M, getMe: () => ents.get(myId), myId: () => myId, me }); });
 </script>
 </html>

@@ -74,3 +74,20 @@ export function pushOut(m, x, z, rad = 0.4) {
   }
   return [x, z];
 }
+
+// ── 눈덩이 ↔ 펭귄 명중 판정 (서버가 판정, 화면은 같은 식으로 미리 터뜨리고 디버그로 그림)
+// 2m 펭귄(penguin.js)을 높이별로 잰 반폭 + 눈덩이 반지름 0.18 에 맞춘 구 두 개 [발 위 높이, 반지름]
+// 몸통·점퍼(반폭 0.74@0.4m, 0.49@0.8m) / 머리·고글·모자(0.68@1.3m, 모자 꼭대기 2.0m)
+export const BALL_R = 0.18;
+export const HIT_SPHERES = [[0.6, 0.8], [1.25, 0.82]]; // 후보 비교(0.9/0.7/0.65/0.6 구 1개)보다 평균 오차 0.19→0.07m
+// 선분 a→b 와 점 c 사이 최단 거리
+export function segDist(ax, ay, az, bx, by, bz, cx, cy, cz) {
+  const dx = bx - ax, dy = by - ay, dz = bz - az, l2 = dx * dx + dy * dy + dz * dz;
+  const t = l2 ? Math.max(0, Math.min(1, ((cx - ax) * dx + (cy - ay) * dy + (cz - az) * dz) / l2)) : 0;
+  return Math.hypot(ax + dx * t - cx, ay + dy * t - cy, az + dz * t - cz);
+}
+// 이번 틱에 눈덩이가 지나간 선분 a→b 가 (px,py,pz)에 선 펭귄에 닿았나 (py = 발바닥 높이)
+export function hitsPenguin(ax, ay, az, bx, by, bz, px, py, pz) {
+  for (const [h, r] of HIT_SPHERES) if (segDist(ax, ay, az, bx, by, bz, px, py + h, pz) < r) return true;
+  return false;
+}

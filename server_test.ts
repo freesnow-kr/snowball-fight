@@ -1,6 +1,6 @@
 // deno test server_test.ts
 import { pushOut } from "./maps.js";
-import { BREAK_MS, createRoom, handle, join, leave, pickRoom, round, ROUND_MS, rooms, tick } from "./server.ts";
+import { BREAK_MS, createRoom, dev, handle, join, leave, pickRoom, rewindFor, round, ROUND_MS, rooms, tick } from "./server.ts";
 import type { P, Room } from "./server.ts";
 
 const sock = { send() {} };
@@ -114,10 +114,73 @@ Deno.test("사람이 던진 공은 상대의 0.2초 전 위치(내 화면에 보
   tick(room, 10_000); // b 가 (0,6) 에 있던 기록
   place(b, 1.5, 6); // 0.2초 사이 옆으로 1.5m 피함
   throwAt(a, 10_200);
-  assert(b.hp === 2 && a.score === 1, `사람 공 hp ${b.hp}`);
+  assert(b.hp === 2 && a.score === 1, `사람 공 hp ${b.hp}`); // 0.2초 전 자리 = 되감기 구간(0.25초) 안
   a.bot = true; // 같은 상황, 봇이 던지면 빗나감
   place(b, 0, 6); tick(room, 20_000); place(b, 1.5, 6);
   handle(a, { t: "th", vx: 0, vy: 0, vz: -20 }, 20_200);
   for (let j = 0; j < 15; j++) tick(room, 20_200);
   assert(b.hp === 2, `봇 공 hp ${b.hp}`);
+});
+
+// 눈덩이 하나를 (target 기준) 옆 dx, 발 위 dy 높이로 정면에서 날려 보내 맞았는지
+function shoot(dx: number, dy: number, opts: { speed?: number; jump?: number } = {}) {
+  const room = createRoom("lake"); // 가운데가 평평한 빙판
+  const a = join(room, sock, "a"), b = join(room, sock, "b");
+  for (const p of room.players.values()) if (p.bot) place(p, 45, -45);
+  place(a, 0, 8);
+  place(b, 0, 0);
+  b.y += opts.jump ?? 0; // 점프 중이면 발이 공중에
+  const sp = opts.speed ?? 25, g = room.map.h(0, 0);
+  room.balls.push({ id: 999, owner: a.id, team: a.team, x: dx, y: g + (opts.jump ?? 0) + dy, z: 3, vx: 0, vy: 7.5 * (3 / sp), vz: -sp, age: 0, rewind: null }); // vy: 날아가는 동안 떨어지는 만큼 미리 올려 높이 유지
+  for (let j = 0; j < 30; j++) tick(room, 1000);
+  return b.hp < 3;
+}
+Deno.test("명중 판정: 몸·머리·발은 맞고, 바로 옆·머리 위로 지나가면 안 맞는다", () => {
+  const cases: [string, number, number, boolean][] = [
+    ["정면 가운데", 0, 1.0, true], ["왼쪽 경계(몸통)", 0.7, 0.6, true], ["오른쪽 경계(몸통)", -0.7, 0.6, true],
+    ["머리 높이", 0, 1.6, true], ["모자 꼭대기", 0, 1.95, true], ["발 근처", 0.3, 0.15, true],
+    ["몸통 옆 1.0m 통과", 1.0, 0.6, false], ["머리 옆 0.95m 통과", 0.95, 1.3, false], ["머리 위 2.3m 통과", 0, 2.3, false],
+  ];
+  for (const [name, dx, dy, want] of cases) assert(shoot(dx, dy) === want, `${name}: ${want ? "맞아야" : "안 맞아야"} 함`);
+});
+Deno.test("명중 판정: 점프 중엔 발이 뜬 높이 기준, 빠른 공(초속 28m)도 몸을 뚫고 지나가지 않는다", () => {
+  assert(shoot(0, 1.0, { jump: 1.2 }), "점프한 펭귄 몸에 맞음");
+  assert(!shoot(0, -0.9, { jump: 1.2 }), "점프한 펭귄 발 아래로 지나감");
+  for (const dx of [0, 0.4, 0.7]) assert(shoot(dx, 1.0, { speed: 28 }), `빠른 공 옆 ${dx}m`);
+});
+
+Deno.test("개발용 '판 끝내기'는 DEV 서버에서만 되고, 고른 팀이 이긴다", () => {
+  const room = createRoom("slope"), a = join(room, sock, "a");
+  dev.on = false;
+  handle(a, { t: "dev", win: "me" }, 1000); round(room, 1000);
+  assert(!room.events.some((e) => (e as unknown[])[0] === "over"), "배포 서버에선 무시");
+  dev.on = true;
+  handle(a, { t: "dev", win: "me" }, 2000); round(room, 2000);
+  const over = room.events.find((e) => (e as unknown[])[0] === "over") as unknown[];
+  assert(over?.[1] === a.team, `이긴 팀 ${over?.[1]} (내 팀 ${a.team})`);
+  dev.on = false;
+});
+
+Deno.test("되감기: 던진 사람 화면에 상대가 보였던 시점 위치로 판정(지금 위치가 아니라)", () => {
+  const room = createRoom("lake");
+  const a = join(room, sock, "a"), b = join(room, sock, "b");
+  for (const p of room.players.values()) if (p.bot) place(p, 45, -45);
+  place(a, 0, 8, Math.PI);
+  for (let k = 0; k <= 6; k++) { place(b, -1.5 + k * 0.5, 0); tick(room, 10_000 + k * 33); } // 0.2초 동안 x -1.5 → +1.5 로 지나감(x=0 은 10_099)
+  for (let k = 1; k <= 6; k++) { place(b, 1.5 + k * 0.5, 0); tick(room, 10_198 + k * 33); } // 계속 멀어짐 → 지금은 x=4.5
+  // 0.25초 뒤 공이 x=0 을 지남: 던진 사람(rtt 100) 화면엔 그때 상대가 x≈0 에 보였음 → 맞음. 지금 위치(x=4.5)엔 안 닿음
+  const shot = (x: number, at: number) => { b.hp = 3; room.balls.push({ id: 7, owner: a.id, team: a.team, x, y: room.map.h(0, 0) + 1, z: 3, vx: 0, vy: 0.9, vz: -25, age: 0, rewind: rewindFor(a) }); for (let j = 0; j < 10; j++) tick(room, at); return b.hp < 3; };
+  assert(shot(0, 10_349), "화면에 보였던 자리 명중");
+  assert(!shot(4.5, 10_350), "화면에선 아직 거기 없던 지금 위치는 빗나감");
+});
+
+Deno.test("되감기 구간은 그 사람 왕복 시간(ping)에 맞춰지고, 봇은 없음, 최대 0.45초", () => {
+  const room = createRoom("slope"), a = join(room, sock, "a");
+  for (let i = 0; i < 30; i++) handle(a, { t: "pong", ts: 10_000 - 160 }, 10_000); // 왕복 0.16초
+  const [lo, hi] = rewindFor(a)!;
+  assert(Math.abs(lo - 230) < 3 && Math.abs(hi - 376) < 3, `rewind ${lo}~${hi}`);
+  for (let i = 0; i < 60; i++) handle(a, { t: "pong", ts: 10_000 - 900 }, 10_000);
+  assert(rewindFor(a)![1] === 450, `상한 ${rewindFor(a)}`);
+  const bot = [...room.players.values()].find((p) => p.bot)!;
+  assert(rewindFor(bot) === null, "봇은 되감기 없음");
 });

@@ -1,11 +1,19 @@
 // 실행: deno run --allow-net --allow-read --allow-env server.ts  →  http://localhost:8000
 // 맵마다 방이 하나씩 있고(maps.js), 방마다 플레이어·눈덩이·눈사람·점수·판이 따로 돈다.
-import { blocksBall, MAPS, mapById, pushOut } from "./maps.js";
+import { blocksBall, hitsPenguin, MAPS, mapById, pushOut } from "./maps.js";
 
 const ARENA = 50, MAX_HUMANS = 30, MAX_AMMO = 10, HP = 3, G = -15, DT = 1 / 30, MAX_PILES = 40;
 const MOVE_SPEED = 8, MOVE_BURST = 3; // 위치 보고 검사: 초당 8m(달리기 7.2+여유)씩 쌓이는 이동 한도, 최대 3m까지 모아 둠(넉백·전송 지연)
-// 사람이 던진 공은 상대의 이 시간 전 위치로도 맞았는지 본다. 내 화면 속 남들은 그리기 지연(0.11초)+통신 시간만큼 과거 모습이라서
-const REWIND_MS = 200;
+// 사람이 던진 공은 '던진 사람 화면에 상대가 보였던 시점'의 위치들(0.033초 간격 기록)로 판정한다 → 화면에서 맞으면 맞고, 빗나가면 빗나감.
+// 화면 속 상대 = 그리기 지연 0.11초 + 스냅샷 간격(0~0.066초) + 스냅샷이 오는 시간만큼 과거, 서버는 던지기를 오는 시간만큼 늦게 받음
+// → 서버 기준 '왕복 시간 + 0.11~0.176초 전'. 앞뒤 0.04초 여유. 왕복 시간은 2초마다 ping 으로 잼. 봇은 지금 위치만
+const REWIND_MAX = 450;
+export const rewindFor = (p: P): [number, number] | null =>
+  p.bot ? null : [Math.min(REWIND_MAX - 100, p.rtt + 70), Math.min(REWIND_MAX, p.rtt + 216)];
+// 개발용 명령(판 바로 끝내기 등)은 DEV=1 로 켠 서버에서만. 배포(Render)에는 DEV 가 없어 무시됨
+export const dev = { on: (() => { try { return Deno.env.get("DEV") === "1"; } catch { return false; } })() };
+// 개발용 네트워크 지연 흉내: DEV=1 LAG=100 이면 주고받는 메시지마다 한쪽 0.1초씩 늦춤(왕복 0.2초)
+const LAG = dev.on ? (() => { try { return Number(Deno.env.get("LAG") ?? 0); } catch { return 0; } })() : 0;
 const TEAM_SIZE = 4; // 팀마다 사람+봇 최소 인원. 모자라면 봇이 채우고, 사람이 들어오면 봇이 빠진다
 export const ROUND_MS = 180_000, BREAK_MS = 6_000; // 한 판 3분, 결과 보여 주는 시간 6초
 const BOT_NAMES = ["눈송이", "고드름", "함박", "싸락", "서리", "눈보라", "진눈깨비", "얼음꽃", "눈꽃", "포근"];
@@ -25,10 +33,11 @@ export type P = {
   hp: number; ammo: number; score: number; freezes: number; frozenUntil: number; gather: boolean; gatherT: number;
   lastThrow: number; roll: number; sock: Sock;
   hist: number[][]; // 최근 0.5초 위치 기록 [시각, x, y, z]
+  rtt: number; pingAt: number; // 왕복 시간(ms, 평균), 마지막 ping 보낸 시각
   moveBudget: number; moveT: number; // 이번 보고에서 움직여도 되는 거리(m)와 마지막 보고 시각
   strafe: number; strafeUntil: number; throwAt: number; // 봇 전용
 };
-type Ball = { id: number; owner: number; team: number; x: number; y: number; z: number; vx: number; vy: number; vz: number; age: number; rewind: number };
+type Ball = { id: number; owner: number; team: number; x: number; y: number; z: number; vx: number; vy: number; vz: number; age: number; rewind: [number, number] | null };
 export type Pile = { id: number; x: number; z: number; parts: number[] };
 
 let nextId = 1, ballId = 1, pileId = 1;
@@ -57,7 +66,7 @@ export function pickRoom(want: unknown): Room | null {
   return pick(open.filter((r) => humanCount(r) === most));
 }
 
-// 팀 0(오렌지)은 서쪽, 팀 1(블루)은 동쪽에서 서로 마주 보고 시작
+// 팀 0(핑크)은 서쪽, 팀 1(블루)은 동쪽에서 서로 마주 보고 시작
 function spawnAt(p: P) {
   const side = p.team === 0 ? -1 : 1, [a, b] = p.room.map.spawnX;
   p.x = side * (a + Math.random() * (b - a));
@@ -72,7 +81,7 @@ function spawnAt(p: P) {
 function addPlayer(room: Room, sock: Sock, name: string, team: number, bot: boolean): P {
   const p: P = {
     id: nextId++, name, team, bot, room, x: 0, y: 0, z: 0, yaw: 0, hp: HP, ammo: MAX_AMMO, score: 0, freezes: 0,
-    frozenUntil: 0, gather: false, gatherT: 0, lastThrow: 0, roll: 0, sock, hist: [], moveBudget: MOVE_BURST, moveT: 0,
+    frozenUntil: 0, gather: false, gatherT: 0, lastThrow: 0, roll: 0, sock, hist: [], rtt: 100, pingAt: 0, moveBudget: MOVE_BURST, moveT: 0,
     strafe: 1, strafeUntil: 0, throwAt: Date.now() + 1000 + Math.random() * 2000,
   };
   spawnAt(p);
@@ -149,6 +158,11 @@ export function handle(p: P, m: any, now = Date.now()) {
       Object.assign(p, { x: cx, y: Math.min(Math.max(y, gy), gy + 2), z: cz, yaw });
       return;
     }
+    case "pong": { // ping 에 대한 답: 왕복 시간 평균(튀는 값은 0.2만 반영)
+      const ts = num(m.ts, 0, now);
+      if (ts !== null && now - ts < 3000) p.rtt += (now - ts - p.rtt) * 0.2;
+      return;
+    }
     case "g":
       p.gather = !!m.on;
       p.gatherT = now;
@@ -161,7 +175,7 @@ export function handle(p: P, m: any, now = Date.now()) {
       vx *= k, vy *= k, vz *= k;
       p.ammo--;
       p.lastThrow = now;
-      const b = { id: ballId++, owner: p.id, team: p.team, x: p.x + Math.sin(p.yaw) * 0.6, y: p.y + 1.5, z: p.z + Math.cos(p.yaw) * 0.6, vx, vy, vz, age: 0, rewind: p.bot ? 0 : REWIND_MS };
+      const b = { id: ballId++, owner: p.id, team: p.team, x: p.x + Math.sin(p.yaw) * 0.6, y: p.y + 1.5, z: p.z + Math.cos(p.yaw) * 0.6, vx, vy, vz, age: 0, rewind: rewindFor(p) };
       room.balls.push(b);
       room.events.push(["th", b.id, b.owner, r2(b.x), r2(b.y), r2(b.z), r2(vx), r2(vy), r2(vz), seq]);
       return;
@@ -170,6 +184,13 @@ export function handle(p: P, m: any, now = Date.now()) {
       if (m.on && !frozen && !p.roll) p.roll = 0.25;
       else if (!m.on && p.roll) { place(p); p.roll = 0; }
       return;
+    case "dev": { // 개발용: 판을 바로 끝냄. win = "me"(내 팀 승) | "them"(상대 승) | "draw"
+      if (!dev.on || room.game.breakUntil) return;
+      const w = m.win === "me" ? p.team : m.win === "them" ? 1 - p.team : -1;
+      room.game.scores = w < 0 ? [1, 1] : w === 0 ? [5, 0] : [0, 5];
+      room.game.roundEnd = now;
+      return;
+    }
     case "emo": {
       const e = num(m.e, 0, 5);
       if (e !== null) room.events.push(["emo", p.id, Math.floor(e)]);
@@ -185,7 +206,8 @@ export function tick(room: Room, now = Date.now()) {
   }
   for (const p of players.values()) {
     p.hist.push([now, p.x, p.y, p.z]);
-    while (p.hist.length > 1 && p.hist[0][0] < now - 500) p.hist.shift();
+    while (p.hist.length > 1 && p.hist[0][0] < now - REWIND_MAX - 50) p.hist.shift();
+    if (!p.bot && now - p.pingAt > 2000) { p.pingAt = now; p.sock.send(JSON.stringify({ t: "ping", ts: now })); }
   }
   room.balls = room.balls.filter((b) => {
     const ax = b.x, ay = b.y, az = b.z;
@@ -193,8 +215,14 @@ export function tick(room: Room, now = Date.now()) {
     for (const p of players.values()) {
       if (p.team === b.team || p.frozenUntil > now) continue; // 같은 팀은 안 맞음
       // 이번 틱에 공이 지나간 선분으로 판정(빠른 공이 몸을 건너뛰지 않게). 사람 공은 상대의 조금 전 위치도 인정
-      const old = b.rewind ? posAt(p, now - b.rewind) : null;
-      if (segDist(ax, ay, az, b.x, b.y, b.z, p.x, p.y + 1, p.z) < 0.9 || (old && segDist(ax, ay, az, b.x, b.y, b.z, old[1], old[2] + 1, old[3]) < 0.9)) {
+      let hit = false, seen = false;
+      if (b.rewind) for (const o of p.hist) {
+        if (o[0] < now - b.rewind[1] || o[0] > now - b.rewind[0]) continue;
+        seen = true;
+        if (hitsPenguin(ax, ay, az, b.x, b.y, b.z, o[1], o[2], o[3])) { hit = true; break; }
+      }
+      if (!seen) hit = hitsPenguin(ax, ay, az, b.x, b.y, b.z, p.x, p.y, p.z); // 봇 공, 또는 막 들어와 기록이 없을 때
+      if (hit) {
         const s = Math.hypot(b.vx, b.vz) || 1, owner = players.get(b.owner);
         if (owner) owner.score++;
         if (now >= game.breakUntil) game.scores[b.team]++;
@@ -215,18 +243,6 @@ export function tick(room: Room, now = Date.now()) {
   });
 }
 
-// 선분 a→b 와 점 c 사이 최단 거리
-function segDist(ax: number, ay: number, az: number, bx: number, by: number, bz: number, cx: number, cy: number, cz: number) {
-  const dx = bx - ax, dy = by - ay, dz = bz - az, l2 = dx * dx + dy * dy + dz * dz;
-  const t = l2 ? Math.max(0, Math.min(1, ((cx - ax) * dx + (cy - ay) * dy + (cz - az) * dz) / l2)) : 0;
-  return Math.hypot(ax + dx * t - cx, ay + dy * t - cy, az + dz * t - cz);
-}
-// 시각 t 무렵 위치 (기록 중 t 이전 마지막 것)
-function posAt(p: P, t: number) {
-  let r = p.hist[0];
-  for (const h of p.hist) if (h[0] <= t) r = h;
-  return r;
-}
 
 // 판 진행: 3분이 끝나면 점수가 높은 팀이 이기고, 6초 쉰 뒤 모두 제자리에서 새 판
 export function round(room: Room, now = Date.now()) {
@@ -305,11 +321,32 @@ export function broadcast(room: Room, now = Date.now()) {
   }
 }
 
+// 정적 파일: 내용 해시를 ETag 로. 파일 이름이 고정이라 오래 캐시(immutable)하지 않고 매번 확인만 함(no-cache)
+// → 안 바뀌었으면 304(본문 없음)로 브라우저 캐시를 그대로 씀, 배포로 바뀌면 바로 새 파일
+const fileCache = new Map<string, { key: string; body: Uint8Array<ArrayBuffer>; etag: string }>();
+async function serveFile(req: Request, file: string, type: string) {
+  const url = new URL(file, import.meta.url), st = await Deno.stat(url), key = `${st.size}-${st.mtime?.getTime()}`;
+  let c = fileCache.get(file);
+  if (c?.key !== key) {
+    const body = await Deno.readFile(url), h = new Uint8Array(await crypto.subtle.digest("SHA-1", body));
+    c = { key, body, etag: `"${[...h.slice(0, 10)].map((b) => b.toString(16).padStart(2, "0")).join("")}"` };
+    fileCache.set(file, c);
+  }
+  const headers = { "etag": c.etag, "cache-control": "no-cache", "content-type": /^(image|model)\//.test(type) ? type : `${type}; charset=utf-8` };
+  // Deno 가 응답을 gzip 으로 줄이면 ETag 를 약한 형식 W/"…" 로 바꿔 보냄 → 브라우저가 돌려주는 값도 W/ 가 붙음. 떼고 비교
+  const tags = (req.headers.get("if-none-match") ?? "").split(",").map((t) => t.trim().replace(/^W\//, ""));
+  if (tags.includes(c.etag)) return new Response(null, { status: 304, headers });
+  return new Response(c.body, { headers });
+}
+
 if (import.meta.main) {
   setInterval(() => { for (const r of rooms.values()) { tick(r); bots(r); round(r); } }, 1000 / 30);
   setInterval(() => { for (const r of rooms.values()) broadcast(r); }, 1000 / 15);
   const FILES: Record<string, [string, string]> = {
     "/chars.js": ["./chars.js", "text/javascript"],
+    "/penguin.js": ["./penguin.js", "text/javascript"],
+    "/debug.js": ["./debug.js", "text/javascript"], // 개발용. localhost?debug 일 때만 화면이 불러옴
+    "/assets/penguin_blue.glb": ["./assets/penguin_blue.glb", "model/gltf-binary"],
     "/maps.js": ["./maps.js", "text/javascript"],
     "/favicon.png": ["./favicon.png", "image/png"],
     "/og.jpg": ["./og.jpg", "image/jpeg"],
@@ -319,18 +356,13 @@ if (import.meta.main) {
     if (path === "/rooms") { // 입장 화면용: 맵별 사람 수
       return Response.json([...rooms.values()].map((r) => ({ id: r.map.id, name: r.map.name, emoji: r.map.emoji, humans: humanCount(r) })));
     }
-    if (FILES[path]) {
-      const [file, type] = FILES[path];
-      return new Response(await Deno.readFile(new URL(file, import.meta.url)), { headers: { "content-type": type.startsWith("image/") ? type : `${type}; charset=utf-8` } });
-    }
-    if (path !== "/ws") {
-      return new Response(await Deno.readFile(new URL("./index.html", import.meta.url)), {
-        headers: { "content-type": "text/html; charset=utf-8" },
-      });
-    }
-    const { socket, response } = Deno.upgradeWebSocket(req);
+    if (FILES[path]) return serveFile(req, ...FILES[path]);
+    if (path !== "/ws") return serveFile(req, "./index.html", "text/html");
+    const { socket: ws, response } = Deno.upgradeWebSocket(req);
+    const socket = LAG ? { send: (s: string) => setTimeout(() => ws.readyState === 1 && ws.send(s), LAG), close: () => ws.close() } : ws;
     let p: P | null = null;
-    socket.onmessage = (e) => {
+    ws.onmessage = (e) => LAG ? setTimeout(() => onMsg(e), LAG) : onMsg(e);
+    const onMsg = (e: MessageEvent) => {
       if (typeof e.data !== "string" || e.data.length > 500) return;
       let m;
       try { m = JSON.parse(e.data); } catch { return; }
@@ -340,7 +372,7 @@ if (import.meta.main) {
       if (!room) { socket.send(JSON.stringify({ t: "full" })); return socket.close(); }
       p = join(room, socket, m.name);
     };
-    socket.onclose = () => { if (p) leave(p); };
+    ws.onclose = () => { if (p) leave(p); };
     return response;
   });
 }
