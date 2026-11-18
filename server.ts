@@ -357,6 +357,8 @@ if (import.meta.main) {
       return Response.json([...rooms.values()].map((r) => ({ id: r.map.id, name: r.map.name, emoji: r.map.emoji, humans: humanCount(r) })));
     }
     if (FILES[path]) return serveFile(req, ...FILES[path]);
+    const ld = path.match(/^\/assets\/loading\/([a-z0-9-]+\.webp)$/); // 로딩 화면 이미지
+    if (ld) { try { return await serveFile(req, `./assets/loading/${ld[1]}`, "image/webp"); } catch { return new Response("not found", { status: 404 }); } }
     if (path !== "/ws") return serveFile(req, "./index.html", "text/html");
     const { socket: ws, response } = Deno.upgradeWebSocket(req);
     const socket = LAG ? { send: (s: string) => setTimeout(() => ws.readyState === 1 && ws.send(s), LAG), close: () => ws.close() } : ws;

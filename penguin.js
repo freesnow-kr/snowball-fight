@@ -19,8 +19,9 @@ const ONCE = new Set(['jump', 'throw', 'hit', 'frozen']);
 const NO_SHADOW = /^(eye|expr_|goggle_lens|jacket_snowflake)/; // 작은 얼굴 부품은 그림자 그리기 생략(그림자 패스 draw call 절약)
 
 let asset = null;
-export function loadPenguin(url = PENGUIN_URL) {
-  asset ??= new GLTFLoader().loadAsync(url).then((gltf) => {
+// onProgress(받은 바이트 비율 0~1 또는 null): 로딩 화면 진행률용. 실패하면 캐시를 비워 다시 시도할 수 있게
+export function loadPenguin(url = PENGUIN_URL, onProgress = null) {
+  asset ??= new GLTFLoader().loadAsync(url, (e) => onProgress?.(e.total ? e.loaded / e.total : null)).then((gltf) => {
     const rest = new THREE.Box3().setFromObject(gltf.scene, true);
     const h = rest.max.y - rest.min.y;
     const clips = Object.fromEntries(gltf.animations.map((c) => [c.name, c]));
@@ -40,6 +41,7 @@ export function loadPenguin(url = PENGUIN_URL) {
     }
     return { gltf, scale: TARGET_HEIGHT / h, footY: rest.min.y, clips, expressions, teamMats: [pink, null] };
   });
+  asset.catch(() => { asset = null; });
   return asset;
 }
 
