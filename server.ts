@@ -4,6 +4,8 @@ import { blocksBall, MAPS, mapById, pushOut } from "./maps.js";
 
 const ARENA = 50, MAX_HUMANS = 30, MAX_AMMO = 10, HP = 3, G = -15, DT = 1 / 30, MAX_PILES = 40;
 const MOVE_SPEED = 8, MOVE_BURST = 3; // 위치 보고 검사: 초당 8m(달리기 7.2+여유)씩 쌓이는 이동 한도, 최대 3m까지 모아 둠(넉백·전송 지연)
+// 사람이 던진 공은 상대의 이 시간 전 위치로도 맞았는지 본다. 내 화면 속 남들은 그리기 지연(0.11초)+통신 시간만큼 과거 모습이라서
+const REWIND_MS = 200;
 const TEAM_SIZE = 4; // 팀마다 사람+봇 최소 인원. 모자라면 봇이 채우고, 사람이 들어오면 봇이 빠진다
 export const ROUND_MS = 180_000, BREAK_MS = 6_000; // 한 판 3분, 결과 보여 주는 시간 6초
 const BOT_NAMES = ["눈송이", "고드름", "함박", "싸락", "서리", "눈보라", "진눈깨비", "얼음꽃", "눈꽃", "포근"];
@@ -22,10 +24,11 @@ export type P = {
   // score = 상대를 맞힌 횟수, freezes = 내가 언 횟수 (둘 다 한 판마다 0부터)
   hp: number; ammo: number; score: number; freezes: number; frozenUntil: number; gather: boolean; gatherT: number;
   lastThrow: number; roll: number; sock: Sock;
+  hist: number[][]; // 최근 0.5초 위치 기록 [시각, x, y, z]
   moveBudget: number; moveT: number; // 이번 보고에서 움직여도 되는 거리(m)와 마지막 보고 시각
   strafe: number; strafeUntil: number; throwAt: number; // 봇 전용
 };
-type Ball = { id: number; owner: number; team: number; x: number; y: number; z: number; vx: number; vy: number; vz: number; age: number };
+type Ball = { id: number; owner: number; team: number; x: number; y: number; z: number; vx: number; vy: number; vz: number; age: number; rewind: number };
 export type Pile = { id: number; x: number; z: number; parts: number[] };
 
 let nextId = 1, ballId = 1, pileId = 1;
@@ -62,13 +65,14 @@ function spawnAt(p: P) {
   p.y = p.room.map.h(p.x, p.z);
   p.yaw = -side * Math.PI / 2;
   p.moveBudget = MOVE_BURST;
+  p.hist = []; // 부활하면 예전 자리로는 못 맞게
   p.moveT = Date.now();
 }
 
 function addPlayer(room: Room, sock: Sock, name: string, team: number, bot: boolean): P {
   const p: P = {
     id: nextId++, name, team, bot, room, x: 0, y: 0, z: 0, yaw: 0, hp: HP, ammo: MAX_AMMO, score: 0, freezes: 0,
-    frozenUntil: 0, gather: false, gatherT: 0, lastThrow: 0, roll: 0, sock, moveBudget: MOVE_BURST, moveT: 0,
+    frozenUntil: 0, gather: false, gatherT: 0, lastThrow: 0, roll: 0, sock, hist: [], moveBudget: MOVE_BURST, moveT: 0,
     strafe: 1, strafeUntil: 0, throwAt: Date.now() + 1000 + Math.random() * 2000,
   };
   spawnAt(p);
@@ -157,7 +161,7 @@ export function handle(p: P, m: any, now = Date.now()) {
       vx *= k, vy *= k, vz *= k;
       p.ammo--;
       p.lastThrow = now;
-      const b = { id: ballId++, owner: p.id, team: p.team, x: p.x + Math.sin(p.yaw) * 0.6, y: p.y + 1.5, z: p.z + Math.cos(p.yaw) * 0.6, vx, vy, vz, age: 0 };
+      const b = { id: ballId++, owner: p.id, team: p.team, x: p.x + Math.sin(p.yaw) * 0.6, y: p.y + 1.5, z: p.z + Math.cos(p.yaw) * 0.6, vx, vy, vz, age: 0, rewind: p.bot ? 0 : REWIND_MS };
       room.balls.push(b);
       room.events.push(["th", b.id, b.owner, r2(b.x), r2(b.y), r2(b.z), r2(vx), r2(vy), r2(vz), seq]);
       return;
@@ -179,11 +183,18 @@ export function tick(room: Room, now = Date.now()) {
   for (const p of players.values()) {
     if (p.gather && p.ammo < MAX_AMMO && p.frozenUntil <= now && now - p.gatherT >= 500) { p.ammo++; p.gatherT = now; }
   }
+  for (const p of players.values()) {
+    p.hist.push([now, p.x, p.y, p.z]);
+    while (p.hist.length > 1 && p.hist[0][0] < now - 500) p.hist.shift();
+  }
   room.balls = room.balls.filter((b) => {
+    const ax = b.x, ay = b.y, az = b.z;
     b.vy += G * DT; b.x += b.vx * DT; b.y += b.vy * DT; b.z += b.vz * DT; b.age += DT;
     for (const p of players.values()) {
       if (p.team === b.team || p.frozenUntil > now) continue; // 같은 팀은 안 맞음
-      if (Math.hypot(b.x - p.x, b.y - (p.y + 1), b.z - p.z) < 0.9) {
+      // 이번 틱에 공이 지나간 선분으로 판정(빠른 공이 몸을 건너뛰지 않게). 사람 공은 상대의 조금 전 위치도 인정
+      const old = b.rewind ? posAt(p, now - b.rewind) : null;
+      if (segDist(ax, ay, az, b.x, b.y, b.z, p.x, p.y + 1, p.z) < 0.9 || (old && segDist(ax, ay, az, b.x, b.y, b.z, old[1], old[2] + 1, old[3]) < 0.9)) {
         const s = Math.hypot(b.vx, b.vz) || 1, owner = players.get(b.owner);
         if (owner) owner.score++;
         if (now >= game.breakUntil) game.scores[b.team]++;
@@ -202,6 +213,19 @@ export function tick(room: Room, now = Date.now()) {
     }
     return b.age < 4 && Math.abs(b.x) < 80 && Math.abs(b.z) < 80;
   });
+}
+
+// 선분 a→b 와 점 c 사이 최단 거리
+function segDist(ax: number, ay: number, az: number, bx: number, by: number, bz: number, cx: number, cy: number, cz: number) {
+  const dx = bx - ax, dy = by - ay, dz = bz - az, l2 = dx * dx + dy * dy + dz * dz;
+  const t = l2 ? Math.max(0, Math.min(1, ((cx - ax) * dx + (cy - ay) * dy + (cz - az) * dz) / l2)) : 0;
+  return Math.hypot(ax + dx * t - cx, ay + dy * t - cy, az + dz * t - cz);
+}
+// 시각 t 무렵 위치 (기록 중 t 이전 마지막 것)
+function posAt(p: P, t: number) {
+  let r = p.hist[0];
+  for (const h of p.hist) if (h[0] <= t) r = h;
+  return r;
 }
 
 // 판 진행: 3분이 끝나면 점수가 높은 팀이 이기고, 6초 쉰 뒤 모두 제자리에서 새 판
@@ -287,6 +311,7 @@ if (import.meta.main) {
   const FILES: Record<string, [string, string]> = {
     "/chars.js": ["./chars.js", "text/javascript"],
     "/maps.js": ["./maps.js", "text/javascript"],
+    "/favicon.svg": ["./favicon.svg", "image/svg+xml"],
   };
   Deno.serve({ port: Number(Deno.env.get("PORT") ?? 8000) }, async (req) => {
     const path = new URL(req.url).pathname;

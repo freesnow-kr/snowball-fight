@@ -104,3 +104,20 @@ Deno.test("위치 보고: 정상 이동은 받고, 순간이동은 거절해 되
   move(tree.x, tree.z, 5000);
   assert(Math.hypot(a.x - tree.x, a.z - tree.z) >= tree.body + 0.39, "나무 안으로 못 들어감");
 });
+
+Deno.test("사람이 던진 공은 상대의 0.2초 전 위치(내 화면에 보이던 자리)도 맞는다. 봇 공은 지금 위치만", () => {
+  const room = createRoom("slope");
+  const a = join(room, sock, "a"), b = join(room, sock, "b");
+  for (const p of room.players.values()) if (p.bot) place(p, 45, -45);
+  place(a, 0, 10, Math.PI);
+  place(b, 0, 6);
+  tick(room, 10_000); // b 가 (0,6) 에 있던 기록
+  place(b, 1.5, 6); // 0.2초 사이 옆으로 1.5m 피함
+  throwAt(a, 10_200);
+  assert(b.hp === 2 && a.score === 1, `사람 공 hp ${b.hp}`);
+  a.bot = true; // 같은 상황, 봇이 던지면 빗나감
+  place(b, 0, 6); tick(room, 20_000); place(b, 1.5, 6);
+  handle(a, { t: "th", vx: 0, vy: 0, vz: -20 }, 20_200);
+  for (let j = 0; j < 15; j++) tick(room, 20_200);
+  assert(b.hp === 2, `봇 공 hp ${b.hp}`);
+});
