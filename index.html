@@ -27,7 +27,7 @@
   #maps button.on, #maps2 button.on { border-color: #ffd166; background: #ffffff40; }
   #maps button small, #maps2 button small { display: block; font-weight: 400; font-size: 12px; opacity: 0.85; }
   /* 입장 전에는 게임 화면 UI(버튼·점수판 등)를 숨김 */
-  body:not(.playing) :is(#touch, #teams, #board, #hud, #help, #msg, #mapBtn) { display: none; }
+  body:not(.playing) :is(#touch, #teams, #board, #hud, #help, #msg, #topBtns) { display: none; }
   /* 모바일 터치 조작 */
   #touch { display: none; }
   .touch #touch { display: block; }
@@ -50,8 +50,21 @@
   @media (orientation: portrait) { /* 세로 화면은 폭이 좁아 버튼 묶음 위쪽에 3열로 */
     #emoBar { right: calc(16px + env(safe-area-inset-right)); bottom: calc(266px + env(safe-area-inset-bottom)); grid-template-columns: repeat(3, 48px); } }
   /* 좌우 바꾸기: 조이스틱 오른쪽, 버튼 왼쪽 */
-  #swap, #mapBtn { position: fixed; left: calc(12px + env(safe-area-inset-left)); top: calc(66px + env(safe-area-inset-top));
-    border: 0; border-radius: 16px; padding: 6px 10px; background: #ffffffbb; font-size: 13px; font-weight: 700; color: #123; }
+  #swap, #topBtns { position: fixed; left: calc(12px + env(safe-area-inset-left)); top: calc(66px + env(safe-area-inset-top)); }
+  #topBtns { display: flex; gap: 6px; }
+  #swap, #topBtns button { border: 0; border-radius: 16px; padding: 6px 10px; background: #ffffffbb; font-size: 13px; font-weight: 700; color: #123; cursor: pointer; }
+  /* 커피 후원 창 */
+  #coffee { position: fixed; inset: 0; display: none; place-items: center; background: #0b2a4a99; z-index: 30; padding: 16px; }
+  #coffee.open { display: grid; }
+  #coffee .card { position: relative; width: min(340px, 100%); box-sizing: border-box; background: #f7fbff; color: #123; border-radius: 22px;
+    padding: 26px 22px 20px; text-align: center; box-shadow: 0 10px 30px #0005; border: 3px solid #fff; }
+  #coffee h3 { margin: 0 0 6px; font-size: 22px; }
+  #coffee p { margin: 0 0 16px; font-size: 14px; line-height: 1.5; color: #456; }
+  #coffee a { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; border-radius: 14px; background: #fee500;
+    color: #191919; font-weight: 800; font-size: 17px; text-decoration: none; box-shadow: 0 3px 0 #d8c200; }
+  #coffee small { display: block; margin-top: 12px; font-size: 12px; color: #789; }
+  #coffeeClose { position: absolute; right: 10px; top: 10px; width: 40px; height: 40px; border-radius: 50%; border: 0; background: #e3ecf5; font-size: 18px; color: #345; cursor: pointer; }
+  #start #coffeeStart { background: transparent; color: #ffe08a; font-weight: 700; font-size: 14px; padding: 4px; }
   #swap { top: calc(106px + env(safe-area-inset-top)); }
   /* 게임 중 맵 바꾸기 창 */
   #mapMenu { position: fixed; inset: 0; display: none; place-items: center; background: #0b2a4acc; color: #fff; z-index: 20; }
@@ -66,7 +79,7 @@
   #emoBar button { width: 48px; height: 48px; }
   @media (max-width: 700px) { #board { font-size: 12px; min-width: 0; } #hud { font-size: 15px; } #msg { font-size: 17px; width: 90%; } #teams { font-size: 15px; } #banner { font-size: 24px; } }
   @media (orientation: portrait) and (max-width: 700px) { /* 세로 폰: 팀 점수판을 맨 위, 나머지는 그 아래로 */
-    #hud, #board { top: calc(48px + env(safe-area-inset-top)); } #mapBtn { top: calc(100px + env(safe-area-inset-top)); } #swap { top: calc(138px + env(safe-area-inset-top)); } }
+    #hud, #board { top: calc(48px + env(safe-area-inset-top)); } #topBtns { top: calc(100px + env(safe-area-inset-top)); } #swap { top: calc(138px + env(safe-area-inset-top)); } }
 </style>
 <div id="hud"></div>
 <div id="board"></div>
@@ -84,7 +97,14 @@
   <div id="emoBar"></div>
   <button id="swap">⇄ 조이스틱 좌우</button>
 </div>
-<button id="mapBtn"></button>
+<div id="topBtns"><button id="mapBtn"></button><button id="coffeeBtn">☕ 후원</button></div>
+<div id="coffee"><div class="card">
+  <button id="coffeeClose" aria-label="닫기">✕</button>
+  <h3>☕ 커피 한 잔 사 주기</h3>
+  <p>슬로프 눈싸움은 무료로 즐길 수 있어요.<br>보내 주신 마음은 눈밭 서버를 켜 두는 데 써요 ⛄</p>
+  <a href="https://qr.kakaopay.com/Ej7tKnWsB" target="_blank" rel="noopener">카카오페이로 후원하기</a>
+  <small>PC에서는 QR 코드가 열려요. 폰 카메라로 찍어 주세요</small>
+</div></div>
 <div id="mapMenu"><div class="panel"><b>🗺️ 맵 바꾸기</b><div id="maps2"></div><button id="mapClose">닫기</button></div></div>
 <div id="start">
   <form>
@@ -92,6 +112,7 @@
     <label>이름<br><input id="nm" maxlength="12" required autofocus></label>
     <div>맵 고르기<div id="maps"></div></div>
     <button>입장</button>
+    <button type="button" id="coffeeStart">☕ 개발자에게 커피 한 잔</button>
   </form>
 </div>
 <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }</script>
@@ -462,6 +483,11 @@ function switchMap(id) {
 $('mapBtn').textContent = isTouch ? '🗺️ 맵' : '🗺️ 맵 (M)';
 $('mapBtn').onclick = () => toggleMapMenu();
 $('mapClose').onclick = () => toggleMapMenu(false);
+// 커피 후원 창: 버튼을 눌렀을 때만 열림. 바깥이나 ✕ 누르면 닫힘
+const coffee = (open) => $('coffee').classList.toggle('open', open);
+$('coffeeBtn').onclick = $('coffeeStart').onclick = () => coffee(true);
+$('coffeeClose').onclick = () => coffee(false);
+$('coffee').onclick = (e) => { if (e.target.id === 'coffee') coffee(false); };
 const loadRooms = async () => { try { roomList = await (await fetch('/rooms')).json(); } catch { /* 서버가 아직이면 다음에 */ } drawMaps(); };
 loadRooms();
 const roomTimer = setInterval(loadRooms, 3000);
@@ -569,7 +595,7 @@ addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT' || e.repeat) return;
   const k = keyOf(e);
   if (k === 'm' && hello) return toggleMapMenu();
-  if (k === 'escape') toggleMapMenu(false);
+  if (k === 'escape') { toggleMapMenu(false); coffee(false); }
   press(k);
   if (k === ' ' || k.startsWith('arrow')) e.preventDefault();
   if (/^Digit[1-6]$/.test(e.code)) send({ t: 'emo', e: +e.code.slice(5) - 1 });
