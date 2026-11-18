@@ -311,7 +311,7 @@ if (import.meta.main) {
   const FILES: Record<string, [string, string]> = {
     "/chars.js": ["./chars.js", "text/javascript"],
     "/maps.js": ["./maps.js", "text/javascript"],
-    "/favicon.svg": ["./favicon.svg", "image/svg+xml"],
+    "/favicon.png": ["./favicon.png", "image/png"],
   };
   Deno.serve({ port: Number(Deno.env.get("PORT") ?? 8000) }, async (req) => {
     const path = new URL(req.url).pathname;
@@ -320,7 +320,7 @@ if (import.meta.main) {
     }
     if (FILES[path]) {
       const [file, type] = FILES[path];
-      return new Response(await Deno.readFile(new URL(file, import.meta.url)), { headers: { "content-type": `${type}; charset=utf-8` } });
+      return new Response(await Deno.readFile(new URL(file, import.meta.url)), { headers: { "content-type": type.startsWith("image/") ? type : `${type}; charset=utf-8` } });
     }
     if (path !== "/ws") {
       return new Response(await Deno.readFile(new URL("./index.html", import.meta.url)), {

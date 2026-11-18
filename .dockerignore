@@ -3,3 +3,4 @@
 .playwright-mcp
 *.png
 README.md
+!favicon.png
