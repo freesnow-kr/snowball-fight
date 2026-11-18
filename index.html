@@ -705,6 +705,8 @@ renderer.setAnimationLoop(() => {
     const sp = mine.frozen || keys.has('f') ? 0 : (run ? 7.2 : 4.4) * (mine.roll ? 0.6 : 1);
     const fx = Math.sin(camYaw), fz = Math.cos(camYaw);
     const vx = (fx * f - fz * s) / len * sp, vz = (fz * f + fx * s) / len * sp;
+    // 모바일: 조이스틱을 옆으로 밀면 시야도 그쪽으로 천천히 돔 (최대 초당 약 70°). PC 키보드는 그대로
+    if (sp) camYaw -= joy.x * 1.2 * dt;
     if (Math.hypot(vx, vz) > 0.1) me.yaw += wrap(Math.atan2(vx, vz) - me.yaw) * Math.min(1, dt * 14);
     // 가속·감속: 속도가 목표로 부드럽게 따라감(눈밭 약 0.1초). 빙판은 아주 천천히(미끄러짐), 공중은 덜 바뀜
     const onIce = map.ice && Math.hypot(me.x, me.z) < map.ice, airborne = me.y > H(me.x, me.z) + 0.05;
