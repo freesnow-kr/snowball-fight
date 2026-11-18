@@ -256,7 +256,7 @@ export function broadcast(room: Room, now = Date.now()) {
   const { players, game } = room;
   const msg = JSON.stringify({
     t: "s",
-    p: [...players.values()].map((p) => [p.id, r2(p.x), r2(p.y), r2(p.z), r2(p.yaw), p.frozenUntil > now ? 1 : 0, r2(p.roll), p.hp, p.ammo, p.score, p.freezes]),
+    p: [...players.values()].map((p) => [p.id, r2(p.x), r2(p.y), r2(p.z), r2(p.yaw), p.frozenUntil > now ? 1 : 0, r2(p.roll), p.hp, p.ammo, p.score, p.freezes, p.gather ? 1 : 0]), // 마지막: 눈 모으는 중(동작 표시용)
     ts: game.scores,
     tl: Math.max(0, Math.ceil((game.roundEnd - now) / 1000)),
     br: game.breakUntil ? 1 : 0,

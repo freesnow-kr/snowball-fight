@@ -28,11 +28,18 @@ export function buildPenguin(THREE, scarfColor = '#ff7a2f') {
     return m;
   }
 
-  // 발·몸·흰 배·날개
-  for (const s of [-1, 1]) part(root, sphere(0.16), BEAK, s * 0.18, 0.05, 0.12, { sy: 0.35, sz: 1.5 });
+  // 발·몸·흰 배·날개. 발과 날개는 걷기·던지기 동작을 위해 따로 움직일 수 있게 둔다(root.userData.parts)
+  const feet = [-1, 1].map((s) => part(root, sphere(0.16), BEAK, s * 0.18, 0.05, 0.12, { sy: 0.35, sz: 1.5 }));
   part(root, sphere(0.5), NAVY, 0, 0.64, 0, { sy: 1.08 });
   part(root, sphere(0.44), BELLY, 0, 0.58, 0.1, { outline: false }); // 몸보다 앞으로 나와 큰 타원으로 보이게
-  for (const s of [-1, 1]) part(root, sphere(0.17), NAVY, s * 0.5, 0.7, 0, { sx: 0.4, sy: 1.5, rz: s * 0.3 });
+  const flippers = [-1, 1].map((s) => { // 어깨를 축으로 도는 날개
+    const pivot = new THREE.Group();
+    pivot.position.set(s * 0.46, 0.95, 0); pivot.rotation.z = s * 0.3;
+    part(pivot, sphere(0.17), NAVY, 0, -0.25, 0, { sx: 0.4, sy: 1.5 });
+    root.add(pivot);
+    return pivot;
+  });
+  root.userData.parts = { feet, flippers };
 
   // 머리: 남색 + 흰 얼굴, 눈·하이라이트·볼터치·부리
   const R = 0.52, head = part(root, sphere(R), NAVY, 0, 1.34, 0);
