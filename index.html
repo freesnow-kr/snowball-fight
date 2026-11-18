@@ -53,17 +53,30 @@
   #swap, #topBtns { position: fixed; left: calc(12px + env(safe-area-inset-left)); top: calc(66px + env(safe-area-inset-top)); }
   #topBtns { display: flex; gap: 6px; }
   #swap, #topBtns button { border: 0; border-radius: 16px; padding: 6px 10px; background: #ffffffbb; font-size: 13px; font-weight: 700; color: #123; cursor: pointer; }
-  /* 커피 후원 창 */
+  /* 후원 창: "펭귄들을 지켜주세요" — 눈밭이 녹는 게이지 */
   #coffee { position: fixed; inset: 0; display: none; place-items: center; background: #0b2a4a99; z-index: 30; padding: 16px; }
   #coffee.open { display: grid; }
-  #coffee .card { position: relative; width: min(340px, 100%); box-sizing: border-box; background: #f7fbff; color: #123; border-radius: 22px;
-    padding: 26px 22px 20px; text-align: center; box-shadow: 0 10px 30px #0005; border: 3px solid #fff; }
-  #coffee h3 { margin: 0 0 6px; font-size: 22px; }
-  #coffee p { margin: 0 0 16px; font-size: 14px; line-height: 1.5; color: #456; }
-  #coffee a { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; border-radius: 14px; background: #fee500;
+  #coffee .card { position: relative; overflow: hidden; width: min(360px, 100%); box-sizing: border-box; background: linear-gradient(#e8f4ff, #fff 45%);
+    color: #123; border-radius: 22px; padding: 30px 22px 18px; text-align: center; box-shadow: 0 10px 30px #0005; border: 3px solid #fff; }
+  #coffee h3 { margin: 0 0 8px; font-size: 23px; letter-spacing: -0.5px; }
+  #coffee p { margin: 0 0 14px; font-size: 14px; line-height: 1.55; color: #456; }
+  #coffee p b { color: #2f6fd0; }
+  /* 녹는 얼음 조각 위의 펭귄 */
+  #scene { display: block; width: 100%; height: auto; margin: 0 0 6px; border-radius: 14px; background: linear-gradient(#cfe9ff, #eaf6ff 60%); }
+  #floe { transform-box: fill-box; transform-origin: center; transform: scaleX(0.4); }
+  #peng { transform-box: fill-box; transform-origin: 50% 100%; animation: wobble 1.4s ease-in-out infinite; }
+  #peng.scared { animation-duration: 0.7s; }
+  #peng.happy { animation: hop 0.5s ease-out 4; }
+  @keyframes wobble { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
+  @keyframes hop { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-16px); } }
+  .wave { animation: wave 3s ease-in-out infinite alternate; }
+  @keyframes wave { to { transform: translateX(-14px); } }
+  #iceText { font-size: 13px; font-weight: 800; color: #3a6f9e; margin-bottom: 14px; }
+  #coffee a { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 54px; border-radius: 14px; background: #fee500;
     color: #191919; font-weight: 800; font-size: 17px; text-decoration: none; box-shadow: 0 3px 0 #d8c200; }
   #coffee small { display: block; margin-top: 12px; font-size: 12px; color: #789; }
-  #coffeeClose { position: absolute; right: 10px; top: 10px; width: 40px; height: 40px; border-radius: 50%; border: 0; background: #e3ecf5; font-size: 18px; color: #345; cursor: pointer; }
+  #coffeeClose { position: absolute; right: 10px; top: 10px; width: 40px; height: 40px; border-radius: 50%; border: 0; background: #fff; font-size: 18px; color: #345; cursor: pointer; z-index: 1; }
+  @media (prefers-reduced-motion: reduce) { #peng, .wave { animation: none !important; } }
   #start #coffeeStart { background: transparent; color: #ffe08a; font-weight: 700; font-size: 14px; padding: 4px; }
   #swap { top: calc(106px + env(safe-area-inset-top)); }
   /* 게임 중 맵 바꾸기 창 */
@@ -97,13 +110,30 @@
   <div id="emoBar"></div>
   <button id="swap">⇄ 조이스틱 좌우</button>
 </div>
-<div id="topBtns"><button id="mapBtn"></button><button id="coffeeBtn">☕ 후원</button></div>
+<div id="topBtns"><button id="mapBtn"></button><button id="coffeeBtn">🐧 지켜주기</button></div>
 <div id="coffee"><div class="card">
   <button id="coffeeClose" aria-label="닫기">✕</button>
-  <h3>☕ 커피 한 잔 사 주기</h3>
-  <p>슬로프 눈싸움은 무료로 즐길 수 있어요.<br>보내 주신 마음은 눈밭 서버를 켜 두는 데 써요 ⛄</p>
-  <a href="https://qr.kakaopay.com/Ej7tKnWsB" target="_blank" rel="noopener">카카오페이로 후원하기</a>
-  <small>PC에서는 QR 코드가 열려요. 폰 카메라로 찍어 주세요</small>
+  <h3>🐧 펭귄들을 지켜주세요</h3>
+  <p>펭귄들이 뛰놀던 눈밭이 <b>지금도 녹고 있어요.</b><br>작은 서버 하나가 이 얼음을 버티고 있어요.</p>
+  <svg id="scene" viewBox="0 0 300 120" aria-hidden="true">
+    <rect y="84" width="300" height="36" fill="#4f9bd9"/>
+    <path class="wave" d="M0 88 q10 -5 20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 v32 h-320z" fill="#6cb2ea"/>
+    <g id="floe"><ellipse cx="150" cy="88" rx="110" ry="9" fill="#a9d4f5"/><ellipse cx="150" cy="83" rx="110" ry="9" fill="#fff"/></g>
+    <g id="peng">
+      <ellipse cx="142" cy="82" rx="6" ry="3" fill="#ff8a1f"/><ellipse cx="158" cy="82" rx="6" ry="3" fill="#ff8a1f"/>
+      <ellipse cx="130" cy="58" rx="5" ry="13" fill="#1f2a44" transform="rotate(20 130 58)"/>
+      <ellipse cx="170" cy="58" rx="5" ry="13" fill="#1f2a44" transform="rotate(-20 170 58)"/>
+      <ellipse cx="150" cy="56" rx="19" ry="26" fill="#1f2a44"/>
+      <ellipse cx="150" cy="62" rx="12" ry="18" fill="#fff"/>
+      <ellipse cx="150" cy="42" rx="12" ry="9" fill="#fff"/>
+      <circle cx="145" cy="41" r="2" fill="#123"/><circle cx="155" cy="41" r="2" fill="#123"/>
+      <path d="M146 45 h8 l-4 5z" fill="#ff8a1f"/>
+      <rect x="133" y="50" width="34" height="6" rx="3" fill="#ff7a1a"/><rect x="157" y="52" width="6" height="13" rx="3" fill="#ff7a1a"/>
+    </g>
+  </svg>
+  <div id="iceText">🧊 남은 얼음 40%</div>
+  <a id="donate" href="https://qr.kakaopay.com/Ej7tKnWsB" target="_blank" rel="noopener">💛 카카오페이로 펭귄 지키기</a>
+  <small>후원금은 모두 서버 유지에 쓰여요 · PC에서는 QR 코드가 열려요</small>
 </div></div>
 <div id="mapMenu"><div class="panel"><b>🗺️ 맵 바꾸기</b><div id="maps2"></div><button id="mapClose">닫기</button></div></div>
 <div id="start">
@@ -112,7 +142,7 @@
     <label>이름<br><input id="nm" maxlength="12" required autofocus></label>
     <div>맵 고르기<div id="maps"></div></div>
     <button>입장</button>
-    <button type="button" id="coffeeStart">☕ 개발자에게 커피 한 잔</button>
+    <button type="button" id="coffeeStart">🐧 펭귄들을 지켜주세요</button>
   </form>
 </div>
 <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }</script>
@@ -483,8 +513,35 @@ function switchMap(id) {
 $('mapBtn').textContent = isTouch ? '🗺️ 맵' : '🗺️ 맵 (M)';
 $('mapBtn').onclick = () => toggleMapMenu();
 $('mapClose').onclick = () => toggleMapMenu(false);
-// 커피 후원 창: 버튼을 눌렀을 때만 열림. 바깥이나 ✕ 누르면 닫힘
-const coffee = (open) => $('coffee').classList.toggle('open', open);
+// 후원 창: 버튼을 눌렀을 때만 열림. 바깥이나 ✕ 누르면 닫힘
+// 열면 펭귄이 선 얼음 조각이 40%→22%로 천천히 녹고, 후원 버튼을 누르면 다시 커지며 펭귄이 기뻐함(실제 후원 여부와는 무관)
+let meltT = 0;
+const setIce = (pct, sec) => {
+  const floe = $('floe');
+  floe.style.transition = `transform ${sec}s ${sec > 3 ? 'linear' : 'cubic-bezier(.3,1.6,.5,1)'}`;
+  floe.style.transform = `scaleX(${pct / 100})`;
+};
+const coffee = (open) => {
+  $('coffee').classList.toggle('open', open);
+  clearInterval(meltT);
+  if (!open) return;
+  let left = 40;
+  $('iceText').textContent = `🧊 남은 얼음 ${left}%`;
+  $('peng').className.baseVal = '';
+  setIce(40, 0);
+  requestAnimationFrame(() => requestAnimationFrame(() => setIce(22, 36)));
+  meltT = setInterval(() => {
+    if (left <= 22) return;
+    $('iceText').textContent = `🧊 남은 얼음 ${--left}%`;
+    if (left <= 30) $('peng').className.baseVal = 'scared'; // 얼음이 작아지면 더 휘청
+  }, 2000);
+};
+$('donate').addEventListener('click', () => {
+  clearInterval(meltT);
+  setIce(100, 1.2);
+  $('peng').className.baseVal = 'happy';
+  $('iceText').textContent = '❄️ 얼음이 다시 꽁꽁! 고마워요';
+});
 $('coffeeBtn').onclick = $('coffeeStart').onclick = () => coffee(true);
 $('coffeeClose').onclick = () => coffee(false);
 $('coffee').onclick = (e) => { if (e.target.id === 'coffee') coffee(false); };
