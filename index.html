@@ -274,7 +274,7 @@ const balls = new Map(); // id -> { mesh, x,y,z, vx,vy,vz, age }
 const piles = new Map(); // id -> Group
 const parts = [];
 const me = { x: 0, y: 0, z: 30, yaw: Math.PI, vy: 0, kx: 0, kz: 0, mvx: 0, mvz: 0 }; // mvx·mvz: 가속·감속이 붙은 실제 이동 속도
-let myId = 0, roundBreak = false, bannerUntil = 0, spawned = false, camYaw = Math.PI, viewYaw = Math.PI, camDist = 6, pitch = 0.22, jump = false, shake = 0, lastSend = 0, lastSent = '', flashUntil = 0, flashText = '';
+let myId = 0, roundBreak = false, bannerUntil = 0, spawned = false, camYaw = Math.PI, viewYaw = Math.PI, camDist = 7.5, pitch = 0.36, jump = false, shake = 0, lastSend = 0, lastSent = '', flashUntil = 0, flashText = '';
 const keys = new Set();
 
 function addEnt(id, name, team, bot) {
@@ -765,7 +765,8 @@ renderer.setAnimationLoop(() => {
     camT.z - Math.cos(viewYaw) * Math.cos(pitch) * camDist,
   );
   camera.position.y = Math.max(camera.position.y, H(camera.position.x, camera.position.z) + 0.5);
-  camera.lookAt(camT.x, camT.y + 1.0, camT.z); // 조준점이 바로 앞 바닥이 아니라 멀리 보이게
+  // 캐릭터보다 3m 앞을 바라봐서 캐릭터는 화면 아래쪽, 가운데는 앞쪽 눈밭이 보이게
+  camera.lookAt(camT.x + Math.sin(viewYaw) * 3, camT.y + 0.4, camT.z + Math.cos(viewYaw) * 3);
 
   // HUD
   if (mine) $('hud').textContent = `❤️ ${'●'.repeat(mine.hp)}   ❄️ ${mine.ammo}/${MAX_AMMO}\n🎯 맞힘 ${mine.score} · 🥶 얼음 ${mine.freezes ?? 0}`;
