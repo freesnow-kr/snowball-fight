@@ -323,7 +323,7 @@ window.LOAD = (() => {
     <tr><td>굴려서 놓기</td><td><kbd>R</kbd> 꾹 → 떼기 (3단이면 눈사람)</td></tr>
     <tr><td>이모트 · 맵</td><td><kbd>1</kbd>~<kbd>6</kbd> · <kbd>M</kbd></td></tr>
     <tr><td>사용법</td><td><kbd>H</kbd></td></tr>
-    <tr><td>🥊 SNOW BRAWL</td><td>개인전: 던지기 대신 <kbd>R</kbd> 꾹 → 떼면 눈이 굴러가요(2점, 쿨다운 2초) · 싸다구 1점</td></tr>
+    <tr><td>🥊 SNOW BRAWL</td><td>개인전: 던지기 대신 <kbd>R</kbd> 꾹 → 떼면 눈이 굴러가요(2점, 쿨다운 2초). 굴리는 중 눈덩이로 밀어 닿아도 2점 · 싸다구 1점</td></tr>
   </table>
   <table class="mo">
     <tr><td>이동 · 달리기</td><td>조이스틱 · 끝까지 밀면 달리기</td></tr>
@@ -335,7 +335,7 @@ window.LOAD = (() => {
     <tr><td>눈 모으기</td><td>🤲 꾹</td></tr>
     <tr><td>굴려서 놓기</td><td>⚪ 꾹 → 떼기 (3단이면 눈사람)</td></tr>
     <tr><td>이모트 · 맵</td><td>😀 · 🗺️</td></tr>
-    <tr><td>🥊 SNOW BRAWL</td><td>개인전: 던지기 대신 ⚪ 꾹 → 떼면 눈이 굴러가요(2점) · 🖐️ 싸다구 1점</td></tr>
+    <tr><td>🥊 SNOW BRAWL</td><td>개인전: 던지기 대신 ⚪ 꾹 → 떼면 눈이 굴러가요(2점). 굴리는 중 밀어 닿아도 2점 · 🖐️ 싸다구 1점</td></tr>
   </table>
 </div></div>
 <div id="bug"><form>
@@ -865,8 +865,9 @@ function onEv(ev) {
     }
     case 'rlx': removeRoll(ev[1], true); break;
     case 'rlh': { // 굴린 눈 명중(서버 판정): 맞은 쪽 휘청 + 별 + 눈꽃, 나면 넉백·경직·흔들림
-      const [, id, tid, x, z, kx, kz] = ev, t = ents.get(tid), now = performance.now();
+      const [, id, tid, x, z, kx, kz, pusher] = ev, t = ents.get(tid), now = performance.now();
       removeRoll(id, false);
+      if (pusher === myId) me.rollAt = now; // 굴리는 중 밀어서 맞힘: 눈덩이가 부서지고 쿨다운 시작
       puff(x, H(x, z) + 0.6, z, 18);
       if (t) { t.hitT = now; starBurst(t.x ?? x, (t.y ?? 0) + 1.35, t.z ?? z); }
       if (tid === myId) { me.kx += kx; me.kz += kz; me.stunUntil = now + SLAP.stun; shake = Math.max(shake, 0.35); me.slide = null; sfx(150, 0.22, 0.28); }

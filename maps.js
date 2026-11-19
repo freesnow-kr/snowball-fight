@@ -51,6 +51,8 @@ export function rollStep(m, b, dt) {
   b.x = nx; b.z = nz;
   return b.d >= BRAWL.rollRange ? 'far' : null;
 }
+// 굴리는 중(R 누르는 동안) 몸 앞 눈덩이 중심: 화면이 그리는 자리와 같음(index.html c.ball, 몸 앞 0.7m + 반지름)
+export const carryAt = (x, z, yaw, r) => [x + Math.sin(yaw) * (0.7 + r), z + Math.cos(yaw) * (0.7 + r)];
 // 굴린 눈이 펭귄(발 높이 py)에 닿나: 바닥 원끼리 겹치고, 점프로 눈 위를 넘지 않았으면
 export const rollHits = (m, b, px, py, pz) => Math.hypot(px - b.x, pz - b.z) < b.r + BODY_R && py < m.h(b.x, b.z) + 2 * b.r - 0.1;
 

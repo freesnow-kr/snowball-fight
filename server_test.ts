@@ -683,3 +683,23 @@ Deno.test("개인전 판 끝: 개인 순위(같은 점수는 같은 순위), 새
   assert(ps.every((p) => p.score === 0), "새 판 점수 0");
   for (let i = 0; i < 4; i++) for (let j = i + 1; j < 4; j++) assert(Math.hypot(ps[i].x - ps[j].x, ps[i].z - ps[j].z) > 15, "새 판 스폰 간격");
 });
+
+Deno.test("개인전 굴리는 중: 몸 앞 눈덩이로 밀어 닿으면 바로 2점·체력 -1, 눈덩이 부서지고 쿨다운, 팀전은 그대로", () => {
+  const room = flat("snow_brawl_arena"), a = join(room, sock, "a"), b = join(room, sock, "b");
+  place(a, 0, 0, Math.PI); place(b, 0, -5); // a 는 -z 를 봄
+  handle(a, { t: "r", on: true }, 1000); run(room, 1000, 100);
+  assert(b.hp === 3 && a.roll > 0, "멀면 안 맞음");
+  place(b, 0, -1.3); run(room, 1200, 33); // 눈덩이 중심 0.95m 앞, 반지름 0.25 + 몸 0.4
+  const ev = evs(room, "rlh").at(-1)!;
+  assert(b.hp === 2 && a.score === BRAWL.rollPts && a.roll === 0 && ev[1] === 0 && ev[7] === a.id, `밀어서 맞힘 hp ${b.hp} score ${a.score} roll ${a.roll}`);
+  handle(a, { t: "r", on: false }, 1300);
+  assert(evs(room, "rl").length === 0, "이미 부서져서 떼도 안 굴러감");
+  handle(a, { t: "r", on: true }, 2000); assert(a.roll === 0, "쿨다운 2초");
+  handle(a, { t: "r", on: true }, 3300); assert(a.roll > 0, "쿨다운 뒤 다시 굴림");
+  // 팀전: 굴리는 중 닿아도 아무 일 없음(지금까지와 같음)
+  const t = flat("slope"), c = join(t, sock, "c"), d = join(t, sock, "d");
+  for (const p of t.players.values()) if (p.bot) place(p, 45, 45);
+  place(c, 0, 0, Math.PI); place(d, 0, -1.3);
+  handle(c, { t: "r", on: true }, 1000); run(t, 1000, 200);
+  assert(d.hp === 3 && c.roll > 0, "팀전은 밀어도 안 맞음");
+});

@@ -1,6 +1,6 @@
 // 실행: deno run --allow-net --allow-read --allow-env server.ts  →  http://localhost:8000
 // 맵마다 방이 하나씩 있고(maps.js), 방마다 플레이어·눈덩이·눈사람·점수·판이 따로 돈다.
-import { blocksBall, BRAWL, GRAVITY, hitsPenguin, isBrawl, JUMP_V, MAPS, mapById, pushOut, rampAt, rampVy, rollHits, rollStep, SLAP, SLIDE, slideNose, slideSpeed, sweep, wallBetween } from "./maps.js";
+import { blocksBall, BRAWL, carryAt, GRAVITY, hitsPenguin, isBrawl, JUMP_V, MAPS, mapById, pushOut, rampAt, rampVy, rollHits, rollStep, SLAP, SLIDE, slideNose, slideSpeed, sweep, wallBetween } from "./maps.js";
 
 const BODY_R_SRV = 0.4; // maps.js BODY_R
 const ARENA = 50, MAX_HUMANS = 30, MAX_AMMO = 10, HP = 3, G = -15, DT = 1 / 30, MAX_PILES = 40;
@@ -371,7 +371,21 @@ export function tick(room: Room, now = Date.now()) {
     while (p.hist.length > 1 && p.hist[0][0] < now - REWIND_MAX - 50) p.hist.shift();
     if (!p.bot && now - p.pingAt > 2000) { p.pingAt = now; p.sock.send(JSON.stringify({ t: "ping", ts: now })); }
   }
-  // 개인전 굴린 눈: 땅을 따라 굴러가다 처음 닿은 펭귄(던진 사람·얼어 있는 사람 빼고)을 맞히고 부서짐. 장애물·13m 끝이면 부서짐
+  // 개인전 굴리는 중: 몸 앞에서 밀고 가는 눈덩이가 다른 펭귄에 닿으면 바로 명중(굴린 눈과 같은 2점·체력 -1). 눈덩이는 부서지고 쿨다운 시작
+  if (brawl(room)) for (const p of players.values()) {
+    if (!p.roll || p.frozenUntil > now || now < room.game.breakUntil) continue;
+    const [x, z] = carryAt(p.x, p.z, p.yaw, p.roll), b = { x, z, r: p.roll };
+    for (const q of players.values()) {
+      if (q === p || q.frozenUntil > now || !rollHits(room.map, b, q.x, q.y, q.z)) continue;
+      const k = 5, dx = Math.sin(p.yaw), dz = Math.cos(p.yaw);
+      events.push(["rlh", 0, q.id, r2(x), r2(z), r2(dx * k), r2(dz * k), p.id]); // id 0 = 굴려 보낸 눈이 아님, 끝 = 민 사람
+      q.stunUntil = now + SLAP.stun; q.slideT = 0;
+      damage(room, q, p, -1, now, BRAWL.rollPts);
+      Object.assign(p, { roll: 0, rollAt: now });
+      break;
+    }
+  }
+  // 개인전 굴린 눈: 땅을 따라 처음 닿은 펭귄(던진 사람·얼어 있는 사람 빼고)을 맞히고 부서짐. 장애물·13m 끝이면 부서짐
   room.rolls = room.rolls.filter((b) => {
     const end = rollStep(room.map, b, DT);
     for (const p of players.values()) {
