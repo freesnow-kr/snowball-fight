@@ -35,7 +35,6 @@
   #banner { position: fixed; left: 50%; top: 40%; transform: translate(-50%, -50%); font-size: 34px; font-weight: 900; color: #fff;
     text-shadow: 0 3px 8px #000a; pointer-events: none; text-align: center; width: 90%; white-space: pre-line; }
   #msg { position: fixed; left: 50%; top: 28%; transform: translateX(-50%); color: #fff; font-size: 22px; font-weight: 700; text-shadow: 0 2px 4px #0009; pointer-events: none; text-align: center; }
-  #help { position: fixed; left: 12px; bottom: 10px; color: #234; font-size: 13px; pointer-events: none; }
   #start { position: fixed; inset: 0; display: grid; place-items: center; background: #0b2a4acc; color: #fff; }
   #start form { display: grid; gap: 12px; background: #ffffff1a; padding: 24px; border-radius: 14px; min-width: 260px; }
   #start input, #start button { font-size: 16px; padding: 8px; border-radius: 8px; border: 0; }
@@ -45,11 +44,10 @@
   #maps button.on, #maps2 button.on { border-color: #ffd166; background: #ffffff40; }
   #maps button small, #maps2 button small { display: block; font-weight: 400; font-size: 12px; opacity: 0.85; }
   /* 입장 전에는 게임 화면 UI(버튼·점수판 등)를 숨김 */
-  body:not(.playing) :is(#touch, #teams, #board, #hud, #help, #msg, #topBtns) { display: none; }
+  body:not(.playing) :is(#touch, #teams, #board, #hud, #msg, #topBtns) { display: none; }
   /* 모바일 터치 조작 */
   #touch { display: none; }
   .touch #touch { display: block; }
-  .touch #help { display: none; }
   #joy { position: fixed; left: calc(24px + env(safe-area-inset-left)); bottom: calc(24px + env(safe-area-inset-bottom));
     width: 130px; height: 130px; border-radius: 50%; background: #ffffff44; box-shadow: inset 0 0 0 2px #ffffffaa; }
   #knob { position: absolute; left: 38px; top: 38px; width: 54px; height: 54px; border-radius: 50%; background: #ffffffdd; box-shadow: 0 2px 6px #0003; pointer-events: none; }
@@ -74,9 +72,10 @@
     #btns { grid-template-columns: repeat(2, 64px); }
     #emoBar { right: calc(16px + env(safe-area-inset-right)); bottom: calc(340px + env(safe-area-inset-bottom)); grid-template-columns: repeat(3, 48px); } }
   /* 좌우 바꾸기: 조이스틱 오른쪽, 버튼 왼쪽 */
-  #swap, #topBtns { position: fixed; left: calc(12px + env(safe-area-inset-left)); top: calc(66px + env(safe-area-inset-top)); }
-  #topBtns { display: flex; gap: 6px; }
-  #swap, #topBtns button { border: 0; border-radius: 16px; padding: 6px 10px; background: #ffffffbb; font-size: 13px; font-weight: 700; color: #123; cursor: pointer; }
+  #topBtns { position: fixed; left: calc(12px + env(safe-area-inset-left)); top: calc(66px + env(safe-area-inset-top)); }
+  #topBtns { display: flex; gap: 6px; flex-wrap: wrap; max-width: calc(100vw - 24px); }
+  body:not(.touch) #topBtns { top: calc(96px + env(safe-area-inset-top)); } /* PC HUD 3줄(싸다구·슬라이딩 쿨다운) 아래 */
+  #topBtns button { border: 0; border-radius: 16px; padding: 6px 10px; background: #ffffffbb; font-size: 13px; font-weight: 700; color: #123; cursor: pointer; }
   /* 후원 창: "펭귄들을 지켜주세요" — 눈밭이 녹는 게이지 */
   #coffee { position: fixed; inset: 0; display: none; place-items: center; background: #0b2a4a99; z-index: 30; padding: 16px; }
   #coffee.open { display: grid; }
@@ -96,11 +95,17 @@
   #coffee small { display: block; margin-top: 12px; font-size: 12px; color: #789; }
   #coffeeClose { position: absolute; right: 10px; top: 10px; width: 40px; height: 40px; border-radius: 50%; border: 0; background: #fff; font-size: 18px; color: #345; cursor: pointer; z-index: 1; }
   /* 버그 제보 창 */
-  #bug { position: fixed; inset: 0; display: none; place-items: center; background: #0b2a4a99; z-index: 30; padding: 16px; }
-  #bug.open { display: grid; }
-  #bug form { position: relative; width: min(380px, 100%); box-sizing: border-box; display: grid; gap: 10px; background: #f7fbff; color: #123;
+  #howto, #bug { position: fixed; inset: 0; display: none; place-items: center; background: #0b2a4a99; z-index: 30; padding: 16px; }
+  #howto.open, #bug.open { display: grid; }
+  #howto .card, #bug form { position: relative; width: min(380px, 100%); box-sizing: border-box; display: grid; gap: 10px; background: #f7fbff; color: #123;
     border-radius: 20px; padding: 22px 18px 16px; box-shadow: 0 10px 30px #0005; border: 3px solid #fff; }
-  #bug h3 { margin: 0; font-size: 20px; }
+  #bug h3, #howto h3 { margin: 0; font-size: 20px; }
+  #howto .card { width: min(440px, 100%); max-height: calc(100dvh - 32px); overflow-y: auto; }
+  #howto table { border-collapse: collapse; font-size: 14px; }
+  #howto td { padding: 7px 4px; border-top: 1px solid #e3ecf5; vertical-align: top; line-height: 1.4; }
+  #howto td:first-child { font-weight: 800; white-space: nowrap; padding-right: 12px; }
+  #howto kbd { display: inline-block; min-width: 1.4em; text-align: center; padding: 0 5px; border-radius: 6px; background: #e3ecf5; border-bottom: 2px solid #c3d2e2; font: 700 13px system-ui, sans-serif; }
+  .touch #howto .pc, body:not(.touch) #howto .mo { display: none; }
   #bug p { margin: 0; font-size: 13px; color: #567; line-height: 1.5; }
   #bug .kinds { display: flex; gap: 6px; flex-wrap: wrap; }
   #bug .kinds label { flex: 1; min-width: 70px; }
@@ -113,10 +118,10 @@
   #bug .row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #789; }
   #bug button[type=submit] { min-height: 46px; border: 0; border-radius: 12px; background: #2f6fd0; color: #fff; font: 800 16px system-ui, sans-serif; cursor: pointer; }
   #bug button[type=submit]:disabled { opacity: 0.5; }
-  #bugClose { position: absolute; right: 10px; top: 10px; width: 40px; height: 40px; border-radius: 50%; border: 0; background: #e3ecf5; font-size: 18px; color: #345; cursor: pointer; }
+  #howtoClose, #bugClose { position: absolute; right: 10px; top: 10px; width: 40px; height: 40px; border-radius: 50%; border: 0; background: #e3ecf5; font-size: 18px; color: #345; cursor: pointer; }
   #bugMsg { min-height: 1.2em; font-size: 13px; font-weight: 700; color: #2f6fd0; }
   #start #coffeeStart { background: transparent; color: #ffe08a; font-weight: 700; font-size: 14px; padding: 4px; }
-  #swap { top: calc(106px + env(safe-area-inset-top)); }
+  body:not(.touch) #swap { display: none; } /* 조이스틱 좌우 바꾸기는 폰만 */
   /* 게임 중 맵 바꾸기 창 */
   #mapMenu { position: fixed; inset: 0; display: none; place-items: center; background: #0b2a4acc; color: #fff; z-index: 20; }
   #mapMenu.open { display: grid; }
@@ -130,7 +135,8 @@
   #emoBar button { width: 48px; height: 48px; }
   @media (max-width: 700px) { #board { font-size: 12px; min-width: 0; } #hud { font-size: 15px; } #msg { font-size: 17px; width: 90%; } #teams { font-size: 15px; } #banner { font-size: 24px; } }
   @media (orientation: portrait) and (max-width: 700px) { /* 세로 폰: 팀 점수판을 맨 위, 나머지는 그 아래로 */
-    #hud, #board { top: calc(48px + env(safe-area-inset-top)); } #topBtns { top: calc(100px + env(safe-area-inset-top)); } #swap { top: calc(138px + env(safe-area-inset-top)); } }
+    #hud, #board { top: calc(48px + env(safe-area-inset-top)); } #topBtns { top: calc(100px + env(safe-area-inset-top)); }
+    #topBtns { max-width: 44vw; } /* 오른쪽 순위표와 안 겹치게 줄바꿈 */ }
   /* ── 로딩 화면: 배경 이미지(로고 포함)는 그대로, 아래에 진행률 바 + 펭귄 ── */
   #loading { position: fixed; inset: 0; height: 100vh; height: 100dvh; z-index: 100; overflow: hidden; color: #1479d4;
     background: #cfe9ff url(/assets/loading/loading-pc.webp) center top / cover no-repeat; transition: opacity 0.5s ease; }
@@ -275,7 +281,6 @@ window.LOAD = (() => {
 <div id="teams"></div>
 <div id="banner"></div>
 <div id="msg"></div>
-<div id="help">이동 WASD·방향키 · 시점 마우스 끌기·트랙패드 두 손가락 · 확대 휠 · 던지기 클릭(누른 곳으로)·E·J(앞 상대 자동 조준) · Shift 달리기 · Space 점프 · F(꾹) 눈 모으기 · R(꾹) 굴리고 떼면 놓기(3단이면 눈사람) · Q·K 싸다구 · C·L 배 슬라이딩 · 1~6 이모트 · M 맵</div>
 <div id="touch">
   <div id="joy"><div id="knob"></div></div>
   <div id="btns">
@@ -285,9 +290,35 @@ window.LOAD = (() => {
     <button data-k="j" class="big">❄️<small>던지기</small></button>
   </div>
   <div id="emoBar"></div>
-  <button id="swap">⇄ 조이스틱 좌우</button>
 </div>
-<div id="topBtns"><button id="mapBtn"></button><button id="coffeeBtn">🐧 지켜주기</button><button id="bugBtn">🐞 제보</button></div>
+<div id="topBtns"><button id="mapBtn"></button><button id="coffeeBtn">🐧 지켜주기</button><button id="bugBtn">🐞 제보</button><button id="howtoBtn"></button><button id="swap">⇄ 조이스틱 좌우</button></div>
+<div id="howto"><div class="card">
+  <button id="howtoClose" type="button" aria-label="닫기">✕</button>
+  <h3>🎮 사용법</h3>
+  <table class="pc">
+    <tr><td>이동</td><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · 방향키 (카메라 기준)</td></tr>
+    <tr><td>달리기 · 점프</td><td><kbd>Shift</kbd> · <kbd>Space</kbd></td></tr>
+    <tr><td>시점 · 확대</td><td>마우스 끌기 · 트랙패드 두 손가락 · 휠</td></tr>
+    <tr><td>던지기</td><td>클릭한 곳으로 · <kbd>E</kbd> <kbd>J</kbd> 앞 상대 자동 조준</td></tr>
+    <tr><td>싸다구</td><td><kbd>Q</kbd> <kbd>K</kbd> 앞 2.3m 상대를 찰싹 (쿨다운 1.2초)</td></tr>
+    <tr><td>배 슬라이딩</td><td><kbd>C</kbd> <kbd>L</kbd> 미끄러지는 중 방향키로 살짝 꺾기 (쿨다운 2.5초)</td></tr>
+    <tr><td>눈 모으기</td><td><kbd>F</kbd> 꾹</td></tr>
+    <tr><td>굴려서 놓기</td><td><kbd>R</kbd> 꾹 → 떼기 (3단이면 눈사람)</td></tr>
+    <tr><td>이모트 · 맵</td><td><kbd>1</kbd>~<kbd>6</kbd> · <kbd>M</kbd></td></tr>
+    <tr><td>사용법</td><td><kbd>H</kbd></td></tr>
+  </table>
+  <table class="mo">
+    <tr><td>이동 · 달리기</td><td>조이스틱 · 끝까지 밀면 달리기</td></tr>
+    <tr><td>점프</td><td>⬆️</td></tr>
+    <tr><td>시점 · 확대</td><td>화면 드래그 · 두 손가락 벌리기</td></tr>
+    <tr><td>던지기</td><td>화면을 탭한 곳으로 · ❄️ 앞 상대 자동 조준</td></tr>
+    <tr><td>싸다구</td><td>🖐️ 앞 2.3m 상대를 찰싹 (쿨다운은 버튼에 표시)</td></tr>
+    <tr><td>배 슬라이딩</td><td>🐧💨 조이스틱으로 살짝 꺾기</td></tr>
+    <tr><td>눈 모으기</td><td>🤲 꾹</td></tr>
+    <tr><td>굴려서 놓기</td><td>⚪ 꾹 → 떼기 (3단이면 눈사람)</td></tr>
+    <tr><td>이모트 · 맵</td><td>😀 · 🗺️</td></tr>
+  </table>
+</div></div>
 <div id="bug"><form>
   <button id="bugClose" type="button" aria-label="닫기">✕</button>
   <h3>🐞 버그 제보</h3>
@@ -963,6 +994,12 @@ const bug = (open) => {
 };
 $('bugBtn').onclick = $('bugStart').onclick = () => bug(true);
 $('bugClose').onclick = () => bug(false);
+// 사용법 팝업: 위 ❓ 버튼·H 로 열고, ✕·바깥·Esc·H 로 닫음
+const howto = (open = !$('howto').classList.contains('open')) => $('howto').classList.toggle('open', open);
+$('howtoBtn').textContent = isTouch ? '❓ 사용법' : '❓ 사용법 (H)';
+$('howtoBtn').onclick = () => howto(true);
+$('howtoClose').onclick = () => howto(false);
+$('howto').addEventListener('pointerdown', (e) => { if (e.target.id === 'howto') howto(false); });
 $('bug').addEventListener('pointerdown', (e) => { if (e.target.id === 'bug') bug(false); });
 $('bugText').addEventListener('input', () => { $('bugCount').textContent = `${$('bugText').value.length}/1000`; });
 $('bug').querySelector('form').addEventListener('submit', async (e) => {
@@ -1101,7 +1138,8 @@ addEventListener('keydown', (e) => {
   if (/^(INPUT|TEXTAREA)$/.test(e.target.tagName) || e.repeat) return; // 글 쓰는 중엔 게임 조작 안 함
   const k = keyOf(e);
   if (k === 'm' && hello) return toggleMapMenu();
-  if (k === 'escape') { toggleMapMenu(false); coffee(false); }
+  if (k === 'h' && hello) return howto();
+  if (k === 'escape') { toggleMapMenu(false); coffee(false); howto(false); }
   press(k);
   if (k === ' ' || k.startsWith('arrow')) e.preventDefault();
   if (/^Digit[1-6]$/.test(e.code)) send({ t: 'emo', e: +e.code.slice(5) - 1 });
