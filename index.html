@@ -84,6 +84,9 @@
   #iceText { font-size: 13px; font-weight: 800; color: #3a6f9e; margin-bottom: 14px; }
   #coffee a { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 54px; border-radius: 14px; background: #fee500;
     color: #191919; font-weight: 800; font-size: 17px; text-decoration: none; box-shadow: 0 3px 0 #d8c200; }
+  #qr { display: none; margin: 14px auto 0; width: 180px; padding: 8px; background: #fff; border-radius: 12px; }
+  #qr.open { display: block; }
+  #qr svg { display: block; width: 100%; height: auto; }
   #coffee small { display: block; margin-top: 12px; font-size: 12px; color: #789; }
   #coffeeClose { position: absolute; right: 10px; top: 10px; width: 40px; height: 40px; border-radius: 50%; border: 0; background: #fff; font-size: 18px; color: #345; cursor: pointer; z-index: 1; }
   /* 버그 제보 창 */
@@ -300,6 +303,7 @@ window.LOAD = (() => {
   <canvas id="scene"></canvas>
   <div id="iceText">🧊 남은 얼음 40%</div>
   <a id="donate" href="https://qr.kakaopay.com/Ej7tKnWsB" target="_blank" rel="noopener">💛 카카오페이로 펭귄 지키기</a>
+  <div id="qr" aria-label="카카오페이 QR 코드"></div>
   <small>후원금은 모두 서버 유지에 쓰여요 · PC에서는 QR 코드가 열려요</small>
 </div></div>
 <div id="mapMenu"><div class="panel"><b>🗺️ 맵 바꾸기</b><div id="maps2"></div><button id="mapClose">닫기</button></div></div>
@@ -865,7 +869,18 @@ const coffee = (open) => {
   clearInterval(iceLoop); // 열려 있을 때만 그림 (renderer 는 하나만 만들어 재사용)
   if (open) iceLoop = setInterval(iceDraw, 1000 / 60);
 };
-$('donate').addEventListener('click', () => {
+// 카카오페이 링크는 PC 브라우저에서 "모바일에서 이용 가능" 안내만 띄움 → PC 는 링크 대신 QR 을 그려서 폰으로 찍게 함
+$('donate').addEventListener('click', async (e) => {
+  if (!isTouch) {
+    e.preventDefault();
+    const qr = $('qr');
+    if (!qr.firstChild) try {
+      const { default: qrcode } = await import('https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/+esm');
+      const q = qrcode(0, 'M'); q.addData($('donate').href); q.make();
+      qr.innerHTML = q.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
+    } catch { return open($('donate').href, '_blank', 'noopener'); } // CDN 실패 시 원래 링크라도
+    qr.classList.add('open');
+  }
   clearInterval(meltT);
   Object.assign(ice, { target: 100, happy: 2.4 });
   $('iceText').textContent = '❄️ 얼음이 다시 꽁꽁! 고마워요';
