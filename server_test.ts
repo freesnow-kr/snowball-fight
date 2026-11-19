@@ -462,7 +462,7 @@ Deno.test("싸다구: 앞 2.3m·정면 ±45° 안의 상대만 맞음(체력·�
   }
 });
 
-Deno.test("싸다구: 쿨다운 1.2초, 같은 팀·얼어 있는 상대 안 맞음, 한 번에 한 명만, 클라이언트가 보낸 대상은 무시", () => {
+Deno.test("싸다구: 쿨다운 1.2초, 같은 팀은 맞지만 점수 없음, 얼어 있는 상대 안 맞음, 한 번에 한 명만, 클라이언트가 보낸 대상은 무시", () => {
   const { room, a, b } = duel();
   slap(a, 1000); slap(a, 1600);
   assert(b.hp === 2 && evs(room, "sl").length === 1, `쿨다운 중 무시 hp ${b.hp}`);
@@ -472,8 +472,11 @@ Deno.test("싸다구: 쿨다운 1.2초, 같은 팀·얼어 있는 상대 안 맞
   slap(a, 4000);
   assert(evs(room, "slap").length === 3 && (b.hp < 3 ? 1 : 0) + (c.hp < 3 ? 1 : 0) === 1, `한 번에 한 명 b ${b.hp} c ${c.hp}`);
   const mate = join(room, sock, "m"); mate.team = a.team; place(mate, 0, -1); b.hp = c.hp = 3; place(b, 30, 30); place(c, 30, 31);
+  const sa = a.score, ts = [...room.game.scores];
   slap(a, 6000);
-  assert(mate.hp === 3, "같은 팀 안 맞음");
+  assert(mate.hp === 2 && mate.stunUntil > 6000, `같은 팀도 맞음(체력·경직) hp ${mate.hp}`);
+  assert(a.score === sa && room.game.scores.join() === ts.join(), "같은 팀을 때리면 개인·팀 점수 없음");
+  place(mate, 30, 32);
   place(b, 0, -1.5); b.frozenUntil = 99_999; slap(a, 8000);
   assert(b.hp === 3, "얼어 있는 상대 안 맞음");
   b.frozenUntil = 0; place(b, 20, 20);

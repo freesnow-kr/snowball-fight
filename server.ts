@@ -288,16 +288,19 @@ export function handle(p: P, m: any, now = Date.now()) {
 }
 
 // 맞음(눈덩이·싸다구 공통): 맞힌 사람·팀 점수 +1, 체력 -1, 3번이면 3초 얼음(하던 슬라이딩·모으기·굴리기 끝)
+// 같은 팀을 때린 싸다구는 점수 없이 체력·경직·얼음만(팀원을 때려 점수를 쌓지 못하게)
 function damage(room: Room, p: P, by: P | undefined, team: number, now: number) {
-  if (by) by.score++;
-  if (now >= room.game.breakUntil) room.game.scores[team]++;
+  if (team !== p.team) {
+    if (by) by.score++;
+    if (now >= room.game.breakUntil) room.game.scores[team]++;
+  }
   p.hp--;
   p.hitAt = now;
   if (p.hp <= 0) Object.assign(p, { hp: HP, frozenUntil: now + 3000, gather: false, roll: 0, freezes: p.freezes + 1, slideT: 0 });
 }
 
 // 싸다구 임팩트 순간(누르고 0.25초 뒤) 판정. 휘두르는 사이 맞았거나 얼었거나 판이 끝났으면 취소.
-// 대상: 상대 팀·안 얼음, 내 화면에 보이던 시점(눈덩이와 같은 되감기)의 자리 중 하나라도 거리 2.3m·정면 ±45°·높이 차 1.6m 안이고
+// 대상: 나 말고 누구나(같은 팀도)·안 얼음, 내 화면에 보이던 시점(눈덩이와 같은 되감기)의 자리 중 하나라도 거리 2.3m·정면 ±45°·높이 차 1.6m 안이고
 // 가슴 높이에서 벽에 안 막힘. 그중 가장 가까운 한 명만(한 번 휘두르면 한 번만 맞음)
 export function resolveSlap(room: Room, a: P, now: number) {
   a.slapPend = false;
@@ -305,7 +308,7 @@ export function resolveSlap(room: Room, a: P, now: number) {
   const fx = Math.sin(a.slapYaw), fz = Math.cos(a.slapYaw), rw = rewindFor(a);
   let best: P | null = null, bd = Infinity;
   for (const t of room.players.values()) {
-    if (t.team === a.team || t.frozenUntil > now) continue;
+    if (t === a || t.frozenUntil > now) continue;
     const spots = rw ? t.hist.filter((o) => o[0] >= now - rw[1] && o[0] <= now - rw[0]) : [];
     if (!spots.length) spots.push([now, t.x, t.y, t.z]);
     for (const [, x, y, z] of spots) {
