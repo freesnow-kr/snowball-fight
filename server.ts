@@ -383,6 +383,24 @@ export function broadcast(room: Room, now = Date.now()) {
   }
 }
 
+// 버그 제보: 화면의 🐞 창에서 보냄. 서버 로그에 '[버그 제보]' 한 줄(JSON)로 남김(Render 대시보드 → Logs 에서 검색).
+// 환경변수 REPORT_WEBHOOK(디스코드·슬랙 웹훅 주소)이 있으면 거기로도 보냄. 같은 IP 는 1분에 3건까지
+const reportLog = new Map<string, number[]>();
+// deno-lint-ignore no-explicit-any
+export function takeReport(body: any, ip: string, now = Date.now()): { ok: true; line: string } | { ok: false; status: number } {
+  const recent = (reportLog.get(ip) ?? []).filter((t) => now - t < 60_000);
+  if (recent.length >= 3) return { ok: false, status: 429 };
+  const text = typeof body?.text === "string" ? body.text.trim().slice(0, 1000) : "";
+  if (text.length < 2) return { ok: false, status: 400 };
+  recent.push(now); reportLog.set(ip, recent);
+  if (reportLog.size > 5000) reportLog.clear(); // ponytail: 메모리 상한만. 공격이 오면 IP 별 제한이 잠깐 풀리는 정도
+  const str = (v: unknown, n: number) => typeof v === "string" ? v.slice(0, n) : undefined;
+  const info = body?.info && typeof body.info === "object" ? body.info : {};
+  const line = JSON.stringify({ at: new Date(now).toISOString(), kind: str(body?.kind, 20), text, name: str(info.name, 12), map: str(info.map, 30),
+    screen: str(info.screen, 30), ua: str(info.ua, 200), url: str(info.url, 200) });
+  return { ok: true, line };
+}
+
 // 정적 파일: 내용 해시를 ETag 로. 파일 이름이 고정이라 오래 캐시(immutable)하지 않고 매번 확인만 함(no-cache)
 // → 안 바뀌었으면 304(본문 없음)로 브라우저 캐시를 그대로 씀, 배포로 바뀌면 바로 새 파일
 const fileCache = new Map<string, { key: string; body: Uint8Array<ArrayBuffer>; etag: string }>();
@@ -417,6 +435,17 @@ if (import.meta.main) {
   };
   Deno.serve({ port: Number(Deno.env.get("PORT") ?? 8000) }, async (req) => {
     const path = new URL(req.url).pathname;
+    if (path === "/report" && req.method === "POST") {
+      const raw = await req.text().catch(() => "");
+      let body; try { body = raw.length <= 4000 ? JSON.parse(raw) : null; } catch { body = null; }
+      const ip = req.headers.get("cf-connecting-ip") ?? req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? "?";
+      const r = takeReport(body, ip);
+      if (!r.ok) return new Response(null, { status: r.status });
+      console.log("[버그 제보]", r.line);
+      const hook = Deno.env.get("REPORT_WEBHOOK");
+      if (hook) fetch(hook, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ content: ("🐞 " + r.line).slice(0, 1900), text: "🐞 " + r.line }) }).catch(() => {});
+      return new Response(null, { status: 204 });
+    }
     if (path === "/rooms") { // 입장 화면용: 맵별 사람 수
       return Response.json([...rooms.values()].map((r) => ({ id: r.map.id, name: r.map.name, emoji: r.map.emoji, humans: humanCount(r) })));
     }

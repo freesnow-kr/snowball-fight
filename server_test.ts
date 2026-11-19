@@ -1,6 +1,6 @@
 // deno test server_test.ts
 import { blocksBall, pushOut } from "./maps.js";
-import { BREAK_MS, createRoom, dev, handle, join, leave, pickRoom, rewindFor, round, ROUND_MS, rooms, tick } from "./server.ts";
+import { BREAK_MS, createRoom, dev, handle, join, leave, pickRoom, rewindFor, round, ROUND_MS, rooms, takeReport, tick } from "./server.ts";
 import type { P, Room } from "./server.ts";
 
 const sock = { send() {} };
@@ -397,4 +397,15 @@ Deno.test("지연: 보고가 0.09~0.12초 늦었다가 몰려 와도 정상 점�
   const u = sim(sf, r.x, r.z - r.hd - 1, jit);
   u.run(1.4, { vx: 0, vz: 7.2 });
   assert(u.corrections() === 0, `점프대 보정 ${u.corrections()}회 ${u.bad()}`);
+});
+
+Deno.test("버그 제보: 글은 1000자까지 남고, 빈 글은 거절, 같은 IP 는 1분에 3건까지", () => {
+  const ok = takeReport({ kind: "버그", text: "  점프대에서 끼여요 " + "x".repeat(2000), info: { map: "slope_field", name: "가".repeat(50) } }, "1.1.1.1", 0);
+  assert(ok.ok && JSON.parse(ok.line).text.length === 1000 && JSON.parse(ok.line).name.length === 12, "자르기");
+  assert(!takeReport({ text: " " }, "2.2.2.2", 0).ok, "빈 글 거절");
+  assert(!takeReport(null, "2.2.2.2", 0).ok && !takeReport({ text: 5 }, "2.2.2.2", 0).ok, "이상한 본문 거절");
+  takeReport({ text: "둘째" }, "1.1.1.1", 1000); takeReport({ text: "셋째" }, "1.1.1.1", 2000);
+  const r4 = takeReport({ text: "넷째" }, "1.1.1.1", 3000);
+  assert(!r4.ok && r4.status === 429, "1분에 3건");
+  assert(takeReport({ text: "1분 뒤" }, "1.1.1.1", 61_000).ok, "1분 지나면 다시");
 });

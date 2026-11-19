@@ -25,7 +25,7 @@
     touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
   /* iOS 는 touch-action 을 요소마다 따로 봄 → 모든 요소에서 브라우저 확대·두 번 탭 확대를 끔. 이름 입력칸만 탭으로 커서 이동 */
   * { touch-action: none; -webkit-tap-highlight-color: transparent; }
-  input { touch-action: manipulation; }
+  input, textarea, select { touch-action: manipulation; }
   #hud { position: fixed; left: calc(12px + env(safe-area-inset-left)); top: calc(10px + env(safe-area-inset-top)); color: #123; font-weight: 700; font-size: 18px; text-shadow: 0 1px 0 #fff; pointer-events: none; white-space: pre-line; line-height: 1.35; }
   #board { position: fixed; right: calc(12px + env(safe-area-inset-right)); top: calc(10px + env(safe-area-inset-top)); background: #ffffffaa; border-radius: 8px; padding: 6px 12px; font-size: 14px; pointer-events: none; min-width: 120px; }
   #teams { position: fixed; left: 50%; top: calc(10px + env(safe-area-inset-top)); transform: translateX(-50%); display: flex; gap: 8px; align-items: center;
@@ -86,6 +86,26 @@
     color: #191919; font-weight: 800; font-size: 17px; text-decoration: none; box-shadow: 0 3px 0 #d8c200; }
   #coffee small { display: block; margin-top: 12px; font-size: 12px; color: #789; }
   #coffeeClose { position: absolute; right: 10px; top: 10px; width: 40px; height: 40px; border-radius: 50%; border: 0; background: #fff; font-size: 18px; color: #345; cursor: pointer; z-index: 1; }
+  /* 버그 제보 창 */
+  #bug { position: fixed; inset: 0; display: none; place-items: center; background: #0b2a4a99; z-index: 30; padding: 16px; }
+  #bug.open { display: grid; }
+  #bug form { position: relative; width: min(380px, 100%); box-sizing: border-box; display: grid; gap: 10px; background: #f7fbff; color: #123;
+    border-radius: 20px; padding: 22px 18px 16px; box-shadow: 0 10px 30px #0005; border: 3px solid #fff; }
+  #bug h3 { margin: 0; font-size: 20px; }
+  #bug p { margin: 0; font-size: 13px; color: #567; line-height: 1.5; }
+  #bug .kinds { display: flex; gap: 6px; flex-wrap: wrap; }
+  #bug .kinds label { flex: 1; min-width: 70px; }
+  #bug .kinds input { position: absolute; opacity: 0; }
+  #bug .kinds span { display: block; text-align: center; padding: 8px 4px; border-radius: 10px; background: #e3ecf5; font-size: 13px; font-weight: 700; cursor: pointer; }
+  #bug .kinds input:checked + span { background: #2f6fd0; color: #fff; }
+  #bug textarea { width: 100%; box-sizing: border-box; min-height: 110px; resize: vertical; border: 2px solid #cfdcea; border-radius: 12px; padding: 10px;
+    font: 16px/1.5 system-ui, sans-serif; user-select: text; -webkit-user-select: text; } /* 16px: iOS 가 입력할 때 화면을 확대하지 않음 */
+  #bug textarea:focus { outline: none; border-color: #2f6fd0; }
+  #bug .row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #789; }
+  #bug button[type=submit] { min-height: 46px; border: 0; border-radius: 12px; background: #2f6fd0; color: #fff; font: 800 16px system-ui, sans-serif; cursor: pointer; }
+  #bug button[type=submit]:disabled { opacity: 0.5; }
+  #bugClose { position: absolute; right: 10px; top: 10px; width: 40px; height: 40px; border-radius: 50%; border: 0; background: #e3ecf5; font-size: 18px; color: #345; cursor: pointer; }
+  #bugMsg { min-height: 1.2em; font-size: 13px; font-weight: 700; color: #2f6fd0; }
   #start #coffeeStart { background: transparent; color: #ffe08a; font-weight: 700; font-size: 14px; padding: 4px; }
   #swap { top: calc(106px + env(safe-area-inset-top)); }
   /* 게임 중 맵 바꾸기 창 */
@@ -257,7 +277,22 @@ window.LOAD = (() => {
   <div id="emoBar"></div>
   <button id="swap">⇄ 조이스틱 좌우</button>
 </div>
-<div id="topBtns"><button id="mapBtn"></button><button id="coffeeBtn">🐧 지켜주기</button></div>
+<div id="topBtns"><button id="mapBtn"></button><button id="coffeeBtn">🐧 지켜주기</button><button id="bugBtn">🐞 제보</button></div>
+<div id="bug"><form>
+  <button id="bugClose" type="button" aria-label="닫기">✕</button>
+  <h3>🐞 버그 제보</h3>
+  <p>이상한 점을 알려 주세요. 어떤 맵에서 무엇을 하다가 생겼는지 적어 주시면 고치기 쉬워요.</p>
+  <div class="kinds">
+    <label><input type="radio" name="kind" value="버그" checked><span>🐞 버그</span></label>
+    <label><input type="radio" name="kind" value="조작"><span>🎮 조작</span></label>
+    <label><input type="radio" name="kind" value="화면"><span>🖼️ 화면</span></label>
+    <label><input type="radio" name="kind" value="제안"><span>💡 제안</span></label>
+  </div>
+  <textarea id="bugText" maxlength="1000" placeholder="예) 나이트 리조트에서 점프대를 타면 펭귄이 벽 안으로 들어가요"></textarea>
+  <div class="row"><span>맵·기기 정보가 같이 보내져요</span><span id="bugCount">0/1000</span></div>
+  <div id="bugMsg" role="status"></div>
+  <button type="submit">보내기</button>
+</form></div>
 <div id="coffee"><div class="card">
   <button id="coffeeClose" aria-label="닫기">✕</button>
   <h3>🐧 펭귄들을 지켜주세요</h3>
@@ -275,6 +310,7 @@ window.LOAD = (() => {
     <div>맵 고르기<div id="maps"></div></div>
     <button>입장</button>
     <button type="button" id="coffeeStart">🐧 펭귄들을 지켜주세요</button>
+    <button type="button" id="bugStart" style="background:transparent;color:#cfe3ff;font-size:13px;padding:2px">🐞 버그 제보</button>
   </form>
 </div>
 <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/" } }</script>
@@ -301,7 +337,7 @@ document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: fals
 let lastTouchEnd = 0;
 document.addEventListener('touchend', (e) => { // 두 번 탭 확대: 0.3초 안에 다시 뗀 탭의 기본 동작만 막음(입력칸 제외)
   const now = performance.now();
-  if (now - lastTouchEnd < 300 && e.target.tagName !== 'INPUT') e.preventDefault();
+  if (now - lastTouchEnd < 300 && !/^(INPUT|TEXTAREA|LABEL|SPAN)$/.test(e.target.tagName)) e.preventDefault();
   lastTouchEnd = now;
 }, { passive: false });
 const viewportMeta = document.querySelector('meta[name=viewport]'), VIEWPORT = viewportMeta.content;
@@ -835,6 +871,31 @@ $('donate').addEventListener('click', () => {
   $('iceText').textContent = '❄️ 얼음이 다시 꽁꽁! 고마워요';
 });
 $('coffeeBtn').onclick = $('coffeeStart').onclick = () => coffee(true);
+// 버그 제보: 글 + 종류 + 맵·화면·브라우저 정보 → /report (서버 로그·웹훅). 보내는 동안 버튼 잠금, 성공하면 잠시 뒤 닫힘
+const bug = (open) => {
+  $('bug').classList.toggle('open', open);
+  if (open) { $('bugMsg').textContent = ''; for (const k of [...keys]) release(k); setTimeout(() => $('bugText').focus(), 50); }
+  else $('bugText').blur();
+};
+$('bugBtn').onclick = $('bugStart').onclick = () => bug(true);
+$('bugClose').onclick = () => bug(false);
+$('bug').addEventListener('pointerdown', (e) => { if (e.target.id === 'bug') bug(false); });
+$('bugText').addEventListener('input', () => { $('bugCount').textContent = `${$('bugText').value.length}/1000`; });
+$('bug').querySelector('form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const text = $('bugText').value.trim(), btn = e.target.querySelector('[type=submit]');
+  if (text.length < 2) { $('bugMsg').textContent = '내용을 조금만 더 적어 주세요'; return; }
+  btn.disabled = true; $('bugMsg').textContent = '보내는 중…';
+  const info = { name: hello?.name, map: map?.id, screen: `${innerWidth}x${innerHeight}@${devicePixelRatio}${isTouch ? ' touch' : ''}`, ua: navigator.userAgent, url: location.pathname };
+  try {
+    const r = await fetch('/report', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: e.target.kind.value, text, info }) });
+    if (r.status === 429) throw new Error('잠시 뒤에 다시 보내 주세요 (1분에 3번까지)');
+    if (!r.ok) throw new Error('보내지 못했어요. 다시 시도해 주세요');
+    $('bugMsg').textContent = '고마워요! 잘 받았어요 🐧'; $('bugText').value = ''; $('bugCount').textContent = '0/1000';
+    setTimeout(() => bug(false), 1200);
+  } catch (err) { $('bugMsg').textContent = err.message.startsWith('잠시') || err.message.startsWith('보내지') ? err.message : '인터넷 연결을 확인하고 다시 시도해 주세요'; }
+  btn.disabled = false;
+});
 $('coffeeClose').onclick = () => coffee(false);
 $('coffee').onclick = (e) => { if (e.target.id === 'coffee') coffee(false); };
 const loadRooms = async () => { try { roomList = await (await fetch('/rooms')).json(); } catch { /* 서버가 아직이면 다음에 */ } drawMaps(); };
@@ -949,7 +1010,8 @@ $('swap').addEventListener('pointerdown', (e) => {
 const keyOf = (e) => e.code.startsWith('Key') ? e.code.slice(3).toLowerCase()
   : e.code === 'Space' ? ' ' : e.code.startsWith('Shift') ? 'shift' : e.key.toLowerCase();
 addEventListener('keydown', (e) => {
-  if (e.target.tagName === 'INPUT' || e.repeat) return;
+  if (e.key === 'Escape') bug(false);
+  if (/^(INPUT|TEXTAREA)$/.test(e.target.tagName) || e.repeat) return; // 글 쓰는 중엔 게임 조작 안 함
   const k = keyOf(e);
   if (k === 'm' && hello) return toggleMapMenu();
   if (k === 'escape') { toggleMapMenu(false); coffee(false); }
