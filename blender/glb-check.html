@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>펭귄 GLB · 게임 캐릭터 검증</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 -apple-system, "Apple SD Gothic Neo", system-ui, sans-serif; color: #24304d; background: #eaf2fc; }
+  .wrap { display: grid; grid-template-columns: 1fr 380px; height: 100dvh; gap: 10px; padding: 10px; }
+  #view { border-radius: 14px; overflow: hidden; border: 1px solid #d9e4f3; min-height: 0; }
+  #view canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+  aside { background: #fff; border: 1px solid #d9e4f3; border-radius: 14px; padding: 14px; overflow: auto; }
+  h3 { font-size: 12px; color: #6b7a99; margin: 12px 0 4px; }
+  button { font: inherit; border: 1px solid #d9e4f3; background: #f6f9fe; border-radius: 10px; padding: 6px 10px; min-height: 36px; margin: 2px; cursor: pointer; }
+  button.on { background: #3f7fe6; color: #fff; border-color: #3f7fe6; }
+  ul { list-style: none; padding: 0; margin: 6px 0; font-size: 12.5px; } li { margin: 3px 0; }
+  .ok { color: #2f9e6a; } .bad { color: #e0525a; } .d { color: #6b7a99; font-size: 11.5px; display: block; margin-left: 18px; word-break: break-all; }
+  @media (max-width: 900px) { .wrap { display: flex; flex-direction: column; height: auto; } #view { height: 55dvh; flex: none; } }
+</style>
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/" } }</script>
+</head>
+<body>
+<div class="wrap">
+  <div id="view"></div>
+  <aside>
+    <b>assets/penguin_blue.glb</b> · 게임 모듈 <code>penguin.js</code> 그대로 사용 (왼쪽 핑크 · 오른쪽 블루, 키 2m)
+    <h3>동작</h3><div id="clips"></div>
+    <h3>표정</h3><div id="exprs"></div>
+    <h3>검증</h3><ul id="rep"></ul>
+  </aside>
+</div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { loadPenguin, Penguin, EXPRESSIONS, PINK_OUTFIT, TARGET_HEIGHT, PENGUIN_URL } from '../penguin.js';
+
+const view = document.getElementById('view');
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.shadowMap.enabled = true;
+view.append(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color('#e3f0fd');
+scene.add(new THREE.HemisphereLight('#ffffff', '#8aa7c7', 1.3));
+const sun = new THREE.DirectionalLight('#fff4e0', 1.6); sun.position.set(6, 10, 8); sun.castShadow = true; scene.add(sun);
+scene.add(new THREE.GridHelper(8, 16, '#7c9cc8', '#c2d3ea'));
+const camera = new THREE.PerspectiveCamera(32, 1, .05, 100); camera.position.set(0, 2.2, 7.6);
+const controls = new OrbitControls(camera, renderer.domElement); controls.target.set(0, 1, 0); controls.enableDamping = true;
+new ResizeObserver(() => { const w = view.clientWidth, h = view.clientHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }).observe(view);
+
+const a = await loadPenguin(PENGUIN_URL);
+const pink = new Penguin(a, 0), blue = new Penguin(a, 1);
+pink.root.position.x = -1.1; blue.root.position.x = 1.1;
+scene.add(pink.root, blue.root);
+const both = [pink, blue];
+let clip = 'idle';
+const mk = (el, items, on) => { const box = document.getElementById(el); for (const [label, fn] of items) { const b = document.createElement('button'); b.textContent = label; b.onclick = () => { box.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b)); fn(); }; box.append(b); } };
+mk('clips', ['idle', 'walk', 'run', 'jump', 'gather', 'roll', 'throw', 'hit', 'victory'].map((s) => [s, () => { clip = s; both.forEach((p) => p.play(s, { restart: true })); }]));
+mk('exprs', EXPRESSIONS.map((e) => [e, () => both.forEach((p) => p.setExpression(e, 600000))]));
+
+// ---- checks ----
+const out = [], add = (ok, label, detail = '') => out.push({ ok, label, detail });
+const buf = await (await fetch(PENGUIN_URL, { cache: 'no-store' })).arrayBuffer();
+add(new DataView(buf).getUint32(0, true) === 0x46546C67, 'GLB 바이너리 · 1회 로딩 캐시', `${(buf.byteLength / 1024).toFixed(0)} KB · loadPenguin() 두 번 호출 = 같은 Promise: ${loadPenguin() === loadPenguin()}`);
+const gameSrc = await (await fetch('../index.html', { cache: 'no-store' })).text() + await (await fetch('../penguin.js', { cache: 'no-store' })).text();
+const LOD = 'lod' + '1';
+add(!gameSrc.toLowerCase().includes(LOD) && !PENGUIN_URL.toLowerCase().includes(LOD), 'LOD1 미사용 (게임 코드에 참조 없음)', `게임이 쓰는 모델: ${PENGUIN_URL}`);
+const W = new THREE.Vector3();
+const height = (p) => new THREE.Box3().setFromObject(p.model, true);
+for (const [n, p] of [['핑크', pink], ['블루', blue]]) {
+  p.root.updateMatrixWorld(true); const b = height(p), s = b.getSize(W);
+  add(Math.abs(s.y - TARGET_HEIGHT) < .01 && Math.abs(b.min.y) < .005, `${n} 키 ${TARGET_HEIGHT}m · 발바닥 y=0`, `${s.x.toFixed(2)} × ${s.y.toFixed(3)} × ${s.z.toFixed(2)} m · 바닥 ${b.min.y.toFixed(4)} · 배율 ${a.scale.toFixed(4)}`);
+}
+const matOf = (p) => { const m = new Map(); p.model.traverse((o) => o.isMesh && m.set(o.material.name, o.material)); return m; };
+const pm = matOf(pink), bm = matOf(blue), hex = (m) => '#' + m.color.getHexString(THREE.SRGBColorSpace);
+const outfitOk = Object.entries(PINK_OUTFIT).every(([k, v]) => pm.get(k.replace('blue', 'pink')) && hex(pm.get(k.replace('blue', 'pink'))) === v && bm.get(k) && hex(bm.get(k)) !== v);
+add(outfitOk, '핑크: 의상 4재질만 변경 · 블루 원본 유지', Object.keys(PINK_OUTFIT).map((k) => `${k}: 블루 ${hex(bm.get(k))} / 핑크 ${hex(pm.get(k.replace('blue', 'pink')))}`).join(' · '));
+const shared = [...pm.keys()].filter((k) => !k.endsWith('_pink')).every((k) => pm.get(k) === bm.get(k));
+const keepProps = Object.keys(PINK_OUTFIT).every((k) => pm.get(k.replace('blue', 'pink')).roughness === bm.get(k).roughness && pm.get(k.replace('blue', 'pink')).metalness === bm.get(k).metalness);
+add(shared && keepProps, '나머지 재질은 블루와 공유 · 거칠기·금속성 유지', `공유 ${[...pm.keys()].filter((k) => !k.endsWith('_pink')).length}개 · 복제 ${Object.keys(PINK_OUTFIT).length}개(팀당 1벌)`);
+const p2 = new Penguin(a, 0); let sameMats = true; p2.model.traverse((o) => { if (o.isMesh && o.material.name.endsWith('_pink')) sameMats &&= pm.get(o.material.name) === o.material; });
+add(sameMats, '같은 팀 캐릭터끼리 재질 공유 (캐릭터마다 복제 없음)');
+let geoShared = true; const g1 = new Map(); pink.model.traverse((o) => o.isMesh && g1.set(o.name, o.geometry)); blue.model.traverse((o) => { if (o.isMesh && g1.get(o.name) !== o.geometry) geoShared = false; });
+add(geoShared, '지오메트리는 모든 캐릭터가 공유 (뼈·애니메이션만 따로)');
+// expressions: every listed part exists, only that set is visible
+const exprBad = [];
+for (const e of EXPRESSIONS) {
+  for (const p of both) {
+    p.setExpression(e, 1); // ms=1 → 덮어쓰기
+    const on = new Set(a.expressions[e]);
+    for (const n of a.expressions[e]) if (!p.parts.get(n)) exprBad.push(`${e}:${n} 없음`);
+    for (const [n, m] of p.parts) if (m.visible !== on.has(n)) exprBad.push(`${e}:${n} 표시 오류`);
+  }
+}
+add(!exprBad.length, '표정 6종 (블루·핑크 동일 시스템)', exprBad.length ? exprBad.slice(0, 4).join(', ') : EXPRESSIONS.map((e) => `${e}(${a.expressions[e].length})`).join(' '));
+// animations: names/durations from GLB, independent mixers, ground at 2m scale
+const want = { Idle: 2.4, Walk: .8, Run: .5, Jump: 1, Gather: 1.4, Roll: 1.2, Throw: .9, Hit: .7, Victory: 1.6 };
+add(Object.entries(want).every(([n, d]) => Math.abs(a.clips[n]?.duration - d) < .02), '애니메이션 9종 이름·길이 유지', Object.keys(want).map((n) => `${n} ${a.clips[n]?.duration.toFixed(2)}s`).join(' · '));
+const test = new Penguin(a, 0), test2 = new Penguin(a, 1); scene.add(test.root, test2.root); test.root.visible = test2.root.visible = false;
+let groundMin = 0, indep = true;
+for (const st of ['idle', 'walk', 'run', 'jump', 'gather', 'roll', 'throw', 'hit', 'victory']) {
+  test.play(st, { restart: true }); test2.play('idle', { restart: true });
+  if (st === 'jump') { test.mixer.stopAllAction(); test.mixer.clipAction(a.clips.Jump).reset().play(); } // 바닥 검사는 루트 이동이 있는 원본 점프로 (게임은 물리가 몸을 띄움)
+  const q2 = test2.model.getObjectByName('upperarm_L').quaternion.clone();
+  for (let i = 0; i < 20; i++) {
+    test.mixer.update(.05); test.root.updateMatrixWorld(true);
+    groundMin = Math.min(groundMin, height(test).min.y);
+  }
+  if (st !== 'idle' && test2.model.getObjectByName('upperarm_L').quaternion.angleTo(q2) > 1e-6) indep = false;
+}
+add(groundMin > -.02, '2m 배율에서 9동작 재생 · 바닥 관통 없음', `최저 y ${groundMin.toFixed(3)} m`);
+add(indep, '캐릭터별 애니메이션 독립', '한 캐릭터를 재생해도 다른 캐릭터 뼈는 그대로');
+const jt = a.clips.JumpInPlace.tracks.map((t) => t.name);
+add(!jt.includes('root.position') && a.clips.Jump.tracks.some((t) => t.name === 'root.position'), '게임용 점프: 루트 상하 이동 제거본 (높이는 게임 물리)', `${jt.length}/${a.clips.Jump.tracks.length} tracks`);
+scene.remove(test.root, test2.root);
+document.getElementById('rep').innerHTML = out.map((c) => `<li><span class="${c.ok ? 'ok' : 'bad'}">${c.ok ? '✔' : '✖'}</span> ${c.label}<span class="d">${c.detail}</span></li>`).join('');
+both.forEach((p) => p.setExpression('normal', 1));
+window.REPORT = out; window.CHK = { pink, blue, camera, controls, renderer, scene };
+
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  const dt = clock.getDelta();
+  both.forEach((p) => p.mixer.update(dt));
+  controls.update(); renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>

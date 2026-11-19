@@ -10,3 +10,8 @@ SLOPE_SNOWFIGHT_MAPS/_backup_v2/
 SLOPE_SNOWFIGHT_MAPS/renders/
 SLOPE_SNOWFIGHT_MAPS/glb/maps_raw/
 SLOPE_SNOWFIGHT_MAPS/glb/props/
+# 펭귄 Blender 작업 부산물(렌더·원본 백업·옛 LOD)
+blender/renders/
+blender/unused/
+blender/penguin_blue.backup.blend
+__pycache__/

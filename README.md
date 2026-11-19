@@ -37,11 +37,15 @@ DEV=1 LAG=80 deno run --allow-net --allow-read --allow-env server.ts    # 주고
 | 눈 모으기 | F 꾹 | 🤲 꾹 |
 | 굴려서 놓기 (3단이면 눈사람) | R 꾹 → 떼기 | ⚪ 꾹 → 떼기 |
 | 점프 · 달리기 | Space · Shift | ⬆️ · 조이스틱 끝까지 |
+| 싸다구(근접 공격) | Q · K | 🖐️ |
+| 배 슬라이딩 | C · L (방향키로 살짝 꺾기) | 🐧💨 (조이스틱으로 살짝 꺾기) |
 | 이모트 · 맵 바꾸기 | 1~6 · M | 😀 · 🗺️ |
 
 ## 규칙
 
 - 3번 맞으면 3초 동안 얼음에 갇힘. 같은 팀은 맞지 않음
+- 싸다구: 앞 2.3m·정면 ±45° 안의 상대 한 명, 눈덩이 한 방과 똑같이 맞힘 +1·체력 -1, 맞은 쪽은 0.3초 경직·살짝 밀림. 벽·울타리 너머는 안 닿음. 쿨다운 1.2초. 명중은 서버가 휘두른 0.25초 뒤에 정함
+- 배 슬라이딩: 달리기의 1.4배로 미끄러짐. 눈밭은 약 1.2초, 빙판은 더 오래(최대 2.2초), 오르막은 빨리 서고 내리막은 덜 섬. 쿨다운 2.5초. 미끄러지는 동안 던지기·싸다구·점프·모으기 안 됨, 눈덩이는 누운 몸에 맞음. 속도·지속은 서버가 계산
 - 착지 원 근처에 거의 멈춘 상대가 있으면 조준 보정(원이 빨갛게)
 - 팀마다 최소 4명이 되도록 봇이 채움. 3분이 지나면 팀 점수로 승패
 - 맵: 슬로프, 숲속 공터, 꽁꽁 언 호수(빙판에서 미끄러짐) + Blender 맵 베이스 캠프, 슬로프 필드, 아이스 레이크(빙판), 포레스트 빌리지, 나이트 리조트. 맵마다 방이 따로
@@ -54,5 +58,5 @@ DEV=1 LAG=80 deno run --allow-net --allow-read --allow-env server.ts    # 주고
 - `maps_glb.js` — Blender 맵의 걸을 수 있는 높이(1m 격자)·장애물·스폰·조명 (생성 파일: `python3 SLOPE_SNOWFIGHT_MAPS/scripts/export_game_data.py`)
 - `mapglb.js` — Blender 맵 GLB 불러오기·캐싱, 반복 소품 InstancedMesh, 맵을 떠나면 GPU 해제
 - `SLOPE_SNOWFIGHT_MAPS/` — Blender 맵 원본·GLB·메타데이터·스크립트 (자세한 건 그 폴더 README)
-- `penguin.js` + `assets/penguin_blue.glb` — 펭귄 캐릭터(GLB 1개로 팀 색·표정 6종·동작 9종). 모델은 `blender/build_penguin.py` 로 다시 만듦, `blender/glb-check.html` 에서 검증·미리보기
+- `penguin.js` + `assets/penguin_blue.glb` — 펭귄 캐릭터(GLB 1개로 팀 색·표정 6종·동작 14종: 기존 9종 + Slap·SlapHit·BellySlide_Start·Loop·End). 모델은 `blender/build_penguin.py` 로 다시 만듦, 신규 동작만 기존 .blend 에 더하려면 `blender -b blender/penguin_blue.blend --python blender/add_actions.py` (기존 동작 키가 바뀌면 중단, 관통·땅 파묻힘 검사 → `blender/report.json`), `blender/glb-check.html` 에서 검증·미리보기
 - `chars.js` — 예전 코드 펭귄(지금 게임에선 안 씀, `characters.html` 미리보기용)

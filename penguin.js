@@ -13,9 +13,13 @@ export const EXPRESSIONS = ['normal', 'excited', 'wink', 'surprised', 'focused',
 // 바꿀 재질 이름 → 핑크 색. 나머지(몸·얼굴·눈·부리·발·고글 렌즈·흰 줄무늬·지퍼)는 블루와 같은 재질을 같이 씀
 export const PINK_OUTFIT = { jacket_blue: '#ff65a8', jacket_trim_blue: '#e44d8f', beanie_blue: '#ff6fae', goggle_strap_blue: '#e8579a' };
 // 동작 → [클립, 표정]
-const MOODS = { idle: 'normal', walk: 'normal', run: 'focused', jump: 'excited', gather: 'focused', roll: 'focused', throw: 'focused', hit: 'surprised', frozen: 'surprised', victory: 'excited' };
-const CLIP = { idle: 'Idle', walk: 'Walk', run: 'Run', jump: 'JumpInPlace', gather: 'Gather', roll: 'Roll', throw: 'Throw', hit: 'Hit', frozen: 'Hit', victory: 'Victory' };
-const ONCE = new Set(['jump', 'throw', 'hit', 'frozen']);
+const MOODS = { idle: 'normal', walk: 'normal', run: 'focused', jump: 'excited', gather: 'focused', roll: 'focused', throw: 'focused', hit: 'surprised', frozen: 'surprised', victory: 'excited',
+  slap: 'focused', slaphit: 'surprised', slide_start: 'excited', slide: 'excited', slide_end: 'normal' };
+const CLIP = { idle: 'Idle', walk: 'Walk', run: 'Run', jump: 'JumpInPlace', gather: 'Gather', roll: 'Roll', throw: 'Throw', hit: 'Hit', frozen: 'Hit', victory: 'Victory',
+  slap: 'Slap', slaphit: 'SlapHit', slide_start: 'BellySlide_Start', slide: 'BellySlide_Loop', slide_end: 'BellySlide_End' };
+const ONCE = new Set(['jump', 'throw', 'hit', 'frozen', 'slap', 'slaphit', 'slide_start', 'slide_end']);
+// 싸다구 맞은 순간 눈 깜빡임: GLB 의 표정 부품(감은 눈 호 + 'o' 입)을 잠깐 조합. 표정 6종 목록은 그대로
+const BLINK = ['expr_eyearc_L', 'expr_eyearc_R', 'expr_mouth_o'];
 const NO_SHADOW = /^(eye|expr_|goggle_lens|jacket_snowflake)/; // 작은 얼굴 부품은 그림자 그리기 생략(그림자 패스 draw call 절약)
 
 let asset = null;
@@ -77,13 +81,13 @@ export class Penguin {
   }
   // 표정: 'normal' | 'excited' | 'wink' | 'surprised' | 'focused' | 'heart'. ms 를 주면 그동안만(이모트), 아니면 동작에 맡김
   setExpression(name, ms = 0, now = performance.now()) {
-    if (!this.a.expressions[name]) return;
+    if (!this.a.expressions[name] && name !== 'blink') return;
     if (ms) { this.exprOverride = name; this.exprUntil = now + ms; }
     this.#show(ms ? name : this.exprOverride && now < this.exprUntil ? this.exprOverride : name);
   }
   #show(name) {
     if (name === this.expr) return;
-    const on = new Set(this.a.expressions[name]);
+    const on = new Set(name === 'blink' ? BLINK : this.a.expressions[name]);
     for (const [n, m] of this.parts) m.visible = on.has(n);
     this.expr = name;
   }
@@ -114,11 +118,20 @@ export class Penguin {
     next.play();
     this.action = next; this.state = state;
   }
-  // 게임 상태 → 동작·표정. s: { moving, running, air, gather, roll, frozen, throwAt, hitAt, victory }
+  // 게임 상태 → 동작·표정. s: { moving, running, air, gather, roll, frozen, throwAt, hitAt, victory, slide, slapAt, slapHitAt }
+  // 우선순위: 얼음 > 배 슬라이딩(시작 0.25초 → 반복 → 끝 0.35초) > 싸다구 맞음 > 눈덩이 맞음 > 싸다구 > 던지기 > 점프 > …
+  // 맞으면 휘두르던 싸다구는 끊김. 슬라이딩 중 맞으면 동작은 그대로, 얼굴만 놀람
   drive(s, now, dt) {
+    if (s.slide && !this.sliding) this.slideAt = now;
+    if (!s.slide && this.sliding) this.slideEndAt = now;
+    this.sliding = !!s.slide;
     let st = 'idle';
     if (s.frozen) st = 'frozen';
+    else if (s.slide) st = now - this.slideAt < 250 ? 'slide_start' : 'slide';
+    else if (now - (this.slideEndAt ?? -1e9) < 350) st = 'slide_end';
+    else if (now - (s.slapHitAt ?? -1e9) < 500) st = 'slaphit';
     else if (now - s.hitAt < 700) st = 'hit';
+    else if (now - (s.slapAt ?? -1e9) < 600) st = 'slap';
     else if (now - s.throwAt < 380) st = 'throw'; // (0.9-0.4)/1.3 ≈ 0.38초
     else if (s.air) st = 'jump';
     else if (s.victory && !s.moving) st = 'victory'; // 판이 끝나도 움직이면 걷기·달리기가 우선
@@ -129,11 +142,14 @@ export class Penguin {
       this.lastThrow = s.throwAt;
       this.play('throw', { from: 0.4, speed: 1.3, fade: 0, restart: true }); // 날개가 머리 위에서 앞으로 휘두르는 순간부터 → 눈덩이가 그 날개 끝에서 출발(index.html)
     } else if (st === 'hit' && this.lastHit !== s.hitAt) { this.lastHit = s.hitAt; this.play('hit', { fade: 0.05, restart: true }); }
+    else if (st === 'slap' && this.lastSlap !== s.slapAt) { this.lastSlap = s.slapAt; this.play('slap', { fade: 0.05, restart: true }); }
+    else if (st === 'slaphit' && this.lastSlapHit !== s.slapHitAt) { this.lastSlapHit = s.slapHitAt; this.play('slaphit', { fade: 0.03, restart: true }); }
     else if (st === 'frozen') this.play('frozen', { from: 0.1, hold: true }); // 맞은 순간 자세로 얼음
     else if (st === 'jump') this.play('jump', { from: 0.18 }); // 발을 뗀 순간부터
-    else if (st !== 'throw' && st !== 'hit') this.play(st);
+    else if (!['throw', 'hit', 'slap', 'slaphit'].includes(st)) this.play(st, st.startsWith('slide') ? { fade: 0.08 } : {});
     if (st === 'walk' || st === 'run') this.action.timeScale = Math.max(0.6, Math.min(1.6, s.speedK ?? 1)); // 발걸음을 이동 속도에 맞춤
-    this.setExpression(MOODS[st], 0, now);
+    const hurt = Math.max(s.hitAt, s.slapHitAt ?? -1e9);
+    this.setExpression(st === 'slaphit' && now - s.slapHitAt < 130 ? 'blink' : st.startsWith('slide') && now - hurt < 600 ? 'surprised' : MOODS[st], 0, now);
     this.mixer.update(dt);
   }
 }

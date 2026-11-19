@@ -1,6 +1,6 @@
 // 실행: deno run --allow-net --allow-read --allow-env server.ts  →  http://localhost:8000
 // 맵마다 방이 하나씩 있고(maps.js), 방마다 플레이어·눈덩이·눈사람·점수·판이 따로 돈다.
-import { blocksBall, GRAVITY, hitsPenguin, JUMP_V, MAPS, mapById, pushOut, rampAt, rampVy, sweep } from "./maps.js";
+import { blocksBall, GRAVITY, hitsPenguin, JUMP_V, MAPS, mapById, pushOut, rampAt, rampVy, SLAP, SLIDE, slideNose, slideSpeed, sweep, wallBetween } from "./maps.js";
 
 const ARENA = 50, MAX_HUMANS = 30, MAX_AMMO = 10, HP = 3, G = -15, DT = 1 / 30, MAX_PILES = 40;
 const MOVE_SPEED = 8, MOVE_BURST = 3; // 위치 보고 검사: 초당 8m(달리기 7.2+여유)씩 쌓이는 이동 한도, 최대 3m까지 모아 둠(넉백·전송 지연)
@@ -38,6 +38,10 @@ export type P = {
   // 서버가 직접 굴리는 수직 상태: 땅에 있나, 공중이면 뜬 시각·높이·처음 위로 속도(점프 8, 점프대 최대 9, 맞고 튕김 4)
   ground: boolean; airT: number; airY: number; airVy: number; hspd: number; onRamp: boolean; // 이번 보고에서 움직여도 되는 거리(m)와 마지막 보고 시각
   strafe: number; strafeUntil: number; throwAt: number; // 봇 전용
+  // 싸다구: 마지막으로 휘두른 시각·그때 바라본 방향·아직 판정 전인지 / 맞은 시각(휘두르는 중 맞으면 취소)·경직 끝
+  slapAt: number; slapYaw: number; slapPend: boolean; hitAt: number; stunUntil: number;
+  // 배 슬라이딩: 시작 시각(0 = 안 함)·서버가 계산한 속도·마지막 시작 시각(쿨다운)
+  slideT: number; slideV: number; slideAt: number;
 };
 type Ball = { id: number; owner: number; team: number; x: number; y: number; z: number; vx: number; vy: number; vz: number; age: number; rewind: [number, number] | null };
 export type Pile = { id: number; x: number; z: number; parts: number[] };
@@ -85,6 +89,7 @@ function spawnAt(p: P) {
   p.moveBudget = MOVE_BURST;
   Object.assign(p, { ground: true, airVy: 0, hspd: 0, onRamp: false });
   p.hist = []; // 부활하면 예전 자리로는 못 맞게
+  Object.assign(p, { slideT: 0, slapPend: false, stunUntil: 0 });
   p.moveT = Date.now();
 }
 
@@ -93,6 +98,7 @@ function addPlayer(room: Room, sock: Sock, name: string, team: number, bot: bool
     id: nextId++, name, team, bot, room, x: 0, y: 0, z: 0, yaw: 0, hp: HP, ammo: MAX_AMMO, score: 0, freezes: 0,
     frozenUntil: 0, gather: false, gatherT: 0, lastThrow: 0, roll: 0, sock, hist: [], rtt: 100, pingAt: 0, moveBudget: MOVE_BURST, moveT: 0, ground: true, airT: 0, airY: 0, airVy: 0, hspd: 0, onRamp: false,
     strafe: 1, strafeUntil: 0, throwAt: Date.now() + 1000 + Math.random() * 2000,
+    slapAt: -1e9, slapYaw: 0, slapPend: false, hitAt: -1e9, stunUntil: 0, slideT: 0, slideV: 0, slideAt: -1e9,
   };
   spawnAt(p);
   room.players.set(p.id, p);
@@ -200,13 +206,21 @@ export function handle(p: P, m: any, now = Date.now()) {
       // 서버는 마지막으로 승인한 위치(p.x,y,z)에서 출발해 직접 검증한 위치만 받는다. 보고된 좌표는 '가고 싶은 곳'일 뿐
       // 1) 속도: 마지막 보고 뒤 흐른 시간만큼 이동 한도가 쌓임(초당 8m, 최대 3m). 넘으면 거절하고 서버 위치로 되돌림
       const dt = Math.max(0, now - p.moveT) / 1000;
-      p.moveBudget = Math.min(MOVE_BURST, p.moveBudget + MOVE_SPEED * dt);
+      // 배 슬라이딩 중: 속도는 서버가 직접 계산(시작 속도·지형 마찰·경사, maps.js slideSpeed) → 그만큼만 이동 한도를 더 줌. 보고된 속도는 안 믿음
+      if (p.slideT) {
+        const mx = x - p.x, mz = z - p.z, ml = Math.hypot(mx, mz);
+        const [dx, dz] = ml > 0.05 ? [mx / ml, mz / ml] : [Math.sin(p.yaw), Math.cos(p.yaw)];
+        p.slideV = slideSpeed(room.map, p.x, p.z, dx, dz, p.slideV, dt);
+        if (p.slideV < SLIDE.vMin - 0.5 || now - p.slideT > SLIDE.maxT * 1000 + 300) p.slideT = 0; // 화면보다 조금 늦게 끝냄(지연 여유)
+      }
+      p.moveBudget = Math.min(MOVE_BURST, p.moveBudget + (p.slideT ? Math.max(MOVE_SPEED, p.slideV + 0.5) : MOVE_SPEED) * dt);
       p.moveT = now;
       if (Math.hypot(x - p.x, z - p.z) > p.moveBudget + 0.25) { p.sock.send(JSON.stringify({ t: "pos", x: p.x, y: p.y, z: p.z })); return; }
       // 2) 높이: 중력을 서버가 계산. 공중이면 '뜬 순간 높이 + 위로 속도·t − 12t²'(+여유 0.35m)보다 높을 수 없음 → 공중 부양·중력 무시 불가
       const ny = verticalCheck(p, x, z, y, now);
       // 3) 벽: 이전 승인 위치 → 요청 위치를 몸 반지름으로 쓸고 지나가며 판정(sweep). 얇은 벽도 못 건너뛰고, 비스듬히 부딪히면 벽을 따라 미끄러짐
-      const [cx, cz] = sweep(room.map, p.x, p.z, x, z, p.y, ny); // 발 높이는 지난 승인 높이 → 이번 높이로 이어서
+      let [cx, cz] = sweep(room.map, p.x, p.z, x, z, p.y, ny); // 발 높이는 지난 승인 높이 → 이번 높이로 이어서
+      if (p.slideT) [cx, cz] = slideNose(room.map, cx, cz, yaw, ny); // 누운 몸의 머리 쪽도 장애물에 안 박히게(화면과 같은 판정)
       const step = Math.hypot(cx - p.x, cz - p.z);
       p.moveBudget = Math.max(0, p.moveBudget - step);
       if (dt > 0) p.hspd += (Math.hypot(cx - p.x, cz - p.z) / Math.max(dt, 0.033) - p.hspd) * 0.5; // 점프대 발사 속도 검증용 수평 속도
@@ -225,13 +239,13 @@ export function handle(p: P, m: any, now = Date.now()) {
       return;
     }
     case "g":
-      p.gather = !!m.on;
+      p.gather = !!m.on && !p.slideT;
       p.gatherT = now;
       return;
     case "th": {
       let vx = num(m.vx, -40, 40), vy = num(m.vy, -40, 40), vz = num(m.vz, -40, 40);
       const seq = num(m.s, 0, 65535) ?? 0; // 던진 사람 화면의 예측 눈덩이와 짝 맞추기용
-      if (vx === null || vy === null || vz === null || frozen || p.roll || p.ammo < 1 || now - p.lastThrow < 250 || now < room.game.breakUntil) return;
+      if (vx === null || vy === null || vz === null || frozen || p.roll || p.slideT || p.ammo < 1 || now - p.lastThrow < 250 || now < room.game.breakUntil) return;
       const s = Math.hypot(vx, vy, vz), k = s > 28 ? 28 / s : 1;
       vx *= k, vy *= k, vz *= k;
       p.ammo--;
@@ -242,9 +256,22 @@ export function handle(p: P, m: any, now = Date.now()) {
       return;
     }
     case "r":
-      if (m.on && !frozen && !p.roll) p.roll = 0.25;
+      if (m.on && !frozen && !p.roll && !p.slideT) p.roll = 0.25;
       else if (!m.on && p.roll) { place(p); p.roll = 0; }
       return;
+    case "sl": { // 싸다구: 누른 것만 받음(대상·명중은 서버가 0.25초 뒤 임팩트 순간에 정함). 쿨다운은 지연 흔들림 0.1초 봐 줌
+      if (frozen || p.slideT || p.roll || now < p.stunUntil || now - p.slapAt < SLAP.cd - 100 || now < room.game.breakUntil) return;
+      Object.assign(p, { slapAt: now, slapYaw: p.yaw, slapPend: true });
+      room.events.push(["sl", p.id]);
+      return;
+    }
+    case "bs": { // 배 슬라이딩 시작(on) / 화면에서 먼저 끝남(off). 시작 속도·방향·지속은 서버가 정함
+      if (!m.on) { p.slideT = 0; return; }
+      const onGround = p.y - room.map.h(p.x, p.z) < 0.3;
+      if (frozen || p.slideT || p.roll || p.gather || !onGround || now < p.stunUntil || now - p.slideAt < SLIDE.cd - 100 || now < room.game.breakUntil) return;
+      Object.assign(p, { slideT: now, slideAt: now, slideV: SLIDE.v0 });
+      return;
+    }
     case "dev": { // 개발용: 판을 바로 끝냄. win = "me"(내 팀 승) | "them"(상대 승) | "draw"
       if (!dev.on || room.game.breakUntil) return;
       const w = m.win === "me" ? p.team : m.win === "them" ? 1 - p.team : -1;
@@ -260,13 +287,51 @@ export function handle(p: P, m: any, now = Date.now()) {
   }
 }
 
+// 맞음(눈덩이·싸다구 공통): 맞힌 사람·팀 점수 +1, 체력 -1, 3번이면 3초 얼음(하던 슬라이딩·모으기·굴리기 끝)
+function damage(room: Room, p: P, by: P | undefined, team: number, now: number) {
+  if (by) by.score++;
+  if (now >= room.game.breakUntil) room.game.scores[team]++;
+  p.hp--;
+  p.hitAt = now;
+  if (p.hp <= 0) Object.assign(p, { hp: HP, frozenUntil: now + 3000, gather: false, roll: 0, freezes: p.freezes + 1, slideT: 0 });
+}
+
+// 싸다구 임팩트 순간(누르고 0.25초 뒤) 판정. 휘두르는 사이 맞았거나 얼었거나 판이 끝났으면 취소.
+// 대상: 상대 팀·안 얼음, 내 화면에 보이던 시점(눈덩이와 같은 되감기)의 자리 중 하나라도 거리 2.3m·정면 ±45°·높이 차 1.6m 안이고
+// 가슴 높이에서 벽에 안 막힘. 그중 가장 가까운 한 명만(한 번 휘두르면 한 번만 맞음)
+export function resolveSlap(room: Room, a: P, now: number) {
+  a.slapPend = false;
+  if (a.frozenUntil > now || a.hitAt >= a.slapAt || now < room.game.breakUntil) return;
+  const fx = Math.sin(a.slapYaw), fz = Math.cos(a.slapYaw), rw = rewindFor(a);
+  let best: P | null = null, bd = Infinity;
+  for (const t of room.players.values()) {
+    if (t.team === a.team || t.frozenUntil > now) continue;
+    const spots = rw ? t.hist.filter((o) => o[0] >= now - rw[1] && o[0] <= now - rw[0]) : [];
+    if (!spots.length) spots.push([now, t.x, t.y, t.z]);
+    for (const [, x, y, z] of spots) {
+      const dx = x - a.x, dz = z - a.z, d = Math.hypot(dx, dz);
+      if (d > SLAP.range || Math.abs(y - a.y) > SLAP.dy || d >= bd) continue;
+      if (d > 0.5 && (dx * fx + dz * fz) / d < SLAP.cos) continue;
+      if (wallBetween(room.map, a.x, a.z, x, z, a.y + 0.9)) continue; // 가슴 높이: 낮은 눈벽(1m)·울타리도 막음
+      best = t; bd = d;
+    }
+  }
+  if (!best) return;
+  const dx = best.x - a.x, dz = best.z - a.z, d = Math.hypot(dx, dz) || 1;
+  room.events.push(["slap", a.id, best.id, r2((dx / d) * SLAP.push), r2((dz / d) * SLAP.push)]);
+  best.stunUntil = now + SLAP.stun;
+  best.slideT = 0; // 경직: 미끄러지던 것도 멈춤
+  damage(room, best, a, a.team, now);
+}
+
 export function tick(room: Room, now = Date.now()) {
-  const { players, piles, events, game } = room, h = room.map.h;
+  const { players, piles, events } = room, h = room.map.h;
+  for (const p of players.values()) if (p.slapPend && now - p.slapAt >= SLAP.impact) resolveSlap(room, p, now);
   for (const p of players.values()) {
     if (p.gather && p.ammo < MAX_AMMO && p.frozenUntil <= now && now - p.gatherT >= 500) { p.ammo++; p.gatherT = now; }
   }
   for (const p of players.values()) {
-    p.hist.push([now, p.x, p.y, p.z]);
+    p.hist.push(p.slideT ? [now, p.x, p.y, p.z, p.yaw] : [now, p.x, p.y, p.z]); // 슬라이딩 중이면 방향도(누운 판정 구)
     while (p.hist.length > 1 && p.hist[0][0] < now - REWIND_MAX - 50) p.hist.shift();
     if (!p.bot && now - p.pingAt > 2000) { p.pingAt = now; p.sock.send(JSON.stringify({ t: "ping", ts: now })); }
   }
@@ -280,17 +345,14 @@ export function tick(room: Room, now = Date.now()) {
       if (b.rewind) for (const o of p.hist) {
         if (o[0] < now - b.rewind[1] || o[0] > now - b.rewind[0]) continue;
         seen = true;
-        if (hitsPenguin(ax, ay, az, b.x, b.y, b.z, o[1], o[2], o[3])) { hit = true; break; }
+        if (hitsPenguin(ax, ay, az, b.x, b.y, b.z, o[1], o[2], o[3], o[4])) { hit = true; break; }
       }
-      if (!seen) hit = hitsPenguin(ax, ay, az, b.x, b.y, b.z, p.x, p.y, p.z); // 봇 공, 또는 막 들어와 기록이 없을 때
+      if (!seen) hit = hitsPenguin(ax, ay, az, b.x, b.y, b.z, p.x, p.y, p.z, p.slideT ? p.yaw : undefined); // 봇 공, 또는 막 들어와 기록이 없을 때
       if (hit) {
-        const s = Math.hypot(b.vx, b.vz) || 1, owner = players.get(b.owner);
-        if (owner) owner.score++;
-        if (now >= game.breakUntil) game.scores[b.team]++;
-        p.hp--;
+        const s = Math.hypot(b.vx, b.vz) || 1;
         events.push(["hit", b.id, r2(b.x), r2(b.y), r2(b.z), p.id, r2((b.vx / s) * 6), r2((b.vz / s) * 6)]);
         knockUp(p, now); // 화면에선 맞으면 살짝 튀어 오름(vy 4)
-        if (p.hp <= 0) Object.assign(p, { hp: HP, frozenUntil: now + 3000, gather: false, roll: 0, freezes: p.freezes + 1 });
+        damage(room, p, players.get(b.owner), b.team, now);
         return false;
       }
     }
@@ -321,6 +383,7 @@ export function round(room: Room, now = Date.now()) {
     const [a, b] = game.scores;
     room.events.push(["over", a === b ? -1 : a > b ? 0 : 1, a, b]);
     game.breakUntil = now + BREAK_MS;
+    for (const p of room.players.values()) Object.assign(p, { slideT: 0, slapPend: false }); // 판이 끝나면 하던 슬라이딩·싸다구 모두 멈춤
   }
 }
 
@@ -371,7 +434,7 @@ export function broadcast(room: Room, now = Date.now()) {
   const { players, game } = room;
   const msg = JSON.stringify({
     t: "s",
-    p: [...players.values()].map((p) => [p.id, r2(p.x), r2(p.y), r2(p.z), r2(p.yaw), p.frozenUntil > now ? 1 : 0, r2(p.roll), p.hp, p.ammo, p.score, p.freezes, p.gather ? 1 : 0]), // 마지막: 눈 모으는 중(동작 표시용)
+    p: [...players.values()].map((p) => [p.id, r2(p.x), r2(p.y), r2(p.z), r2(p.yaw), p.frozenUntil > now ? 1 : 0, r2(p.roll), p.hp, p.ammo, p.score, p.freezes, p.gather ? 1 : 0, p.slideT ? 1 : 0]), // 끝 두 개: 눈 모으는 중·배 슬라이딩 중(동작·판정 표시용)
     ts: game.scores,
     tl: Math.max(0, Math.ceil((game.roundEnd - now) / 1000)),
     br: game.breakUntil ? 1 : 0,

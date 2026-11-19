@@ -418,3 +418,194 @@ Deno.test("제보 → GitHub 이슈: 제목은 [종류] 첫 줄, 사용자 글�
   assert(body.includes("```\n@octocat 점프대 이상해요\nʼʼʼ\n<script>\n```"), "본문 코드 블록");
   assert(!/\| @/.test(body) && body.includes("| 맵 | slope_field |") && body.includes(" bad name"), "표 칸에 @·| 없음");
 });
+
+// ── 싸다구 ──────────────────────────────────────────────
+import { SLAP, SLIDE, slideMove, slideOver, slideNose } from "./maps.js";
+import { resolveSlap } from "./server.ts";
+const evs = (room: Room, k: string) => room.events.filter((e) => (e as unknown[])[0] === k) as unknown[][];
+// 평평한 눈밭(테스트 전용 지형). 장애물 없음
+const flat = (id = "slope", h = (_x: number, _z: number) => 0) => {
+  const room = createRoom(id);
+  room.map = { ...room.map, id: "test_flat", h, obstacles: [], ramps: undefined, ice: undefined, onIce: undefined } as unknown as Room["map"];
+  return room;
+};
+// a 가 (0,0)에서 -z 를 보고 싸다구, t = 0.25초 뒤 임팩트까지 굴림
+const duel = (room = flat()) => {
+  const a = join(room, sock, "a"), b = join(room, sock, "b");
+  for (const p of room.players.values()) if (p.bot) place(p, 45, 45);
+  place(a, 0, 0, Math.PI); place(b, 0, -1.6);
+  return { room, a, b };
+};
+const slap = (a: P, now: number) => { handle(a, { t: "sl" }, now); for (let k = 0; k <= 8; k++) tick(a.room, now + k * 33); };
+
+Deno.test("싸다구: 앞 2.3m·정면 ±45° 안의 상대만 맞음(체력·점수·경직·넉백), 0.25초 임팩트에 판정", () => {
+  const { room, a, b } = duel();
+  handle(a, { t: "sl" }, 1000);
+  assert(evs(room, "sl").length === 1, "휘두르기 이벤트(다른 화면 동작)");
+  tick(room, 1200);
+  assert(b.hp === 3, "임팩트 전엔 안 맞음");
+  tick(room, 1250);
+  const e = evs(room, "slap")[0];
+  assert(b.hp === 2 && a.score === 1 && room.game.scores[a.team] === 1, `명중 hp ${b.hp} 점수 ${a.score}`);
+  assert(e?.[1] === a.id && e?.[2] === b.id && (e[4] as number) < 0, `이벤트 ${JSON.stringify(e)} (넉백은 -z)`);
+  assert(b.stunUntil === 1250 + SLAP.stun, "0.3초 경직");
+  const cases: [string, number, number, boolean][] = [
+    ["2.2m 앞", 0, -2.2, true], ["2.5m 앞(거리 밖)", 0, -2.5, false], ["40° 옆", -Math.sin(0.7) * 1.8, -Math.cos(0.7) * 1.8, true],
+    ["60° 옆(각도 밖)", -Math.sin(1.05) * 1.8, -Math.cos(1.05) * 1.8, false], ["바로 뒤", 0, 1.2, false], ["높이 차 2m(점프 위)", 0, -1.5, false],
+  ];
+  for (const [name, x, z, want] of cases) {
+    const d = duel();
+    place(d.b, x, z);
+    if (name.startsWith("높이")) d.b.y += 2;
+    d.b.hist = []; slap(d.a, 5000);
+    assert((d.b.hp < 3) === want, `${name}: ${want ? "맞아야" : "안 맞아야"} 함`);
+  }
+});
+
+Deno.test("싸다구: 쿨다운 1.2초, 같은 팀·얼어 있는 상대 안 맞음, 한 번에 한 명만, 클라이언트가 보낸 대상은 무시", () => {
+  const { room, a, b } = duel();
+  slap(a, 1000); slap(a, 1600);
+  assert(b.hp === 2 && evs(room, "sl").length === 1, `쿨다운 중 무시 hp ${b.hp}`);
+  slap(a, 2300);
+  assert(b.hp === 1, "쿨다운 뒤 다시");
+  const c = join(room, sock, "c"); place(c, 0.6, -1.4); c.team = b.team; b.hp = 3; // 둘 다 사정거리 안
+  slap(a, 4000);
+  assert(evs(room, "slap").length === 3 && (b.hp < 3 ? 1 : 0) + (c.hp < 3 ? 1 : 0) === 1, `한 번에 한 명 b ${b.hp} c ${c.hp}`);
+  const mate = join(room, sock, "m"); mate.team = a.team; place(mate, 0, -1); b.hp = c.hp = 3; place(b, 30, 30); place(c, 30, 31);
+  slap(a, 6000);
+  assert(mate.hp === 3, "같은 팀 안 맞음");
+  place(b, 0, -1.5); b.frozenUntil = 99_999; slap(a, 8000);
+  assert(b.hp === 3, "얼어 있는 상대 안 맞음");
+  b.frozenUntil = 0; place(b, 20, 20);
+  handle(a, { t: "sl", target: b.id, hit: true }, 10_000); for (let k = 0; k < 10; k++) tick(room, 10_000 + k * 33);
+  assert(b.hp === 3, "멀리 있는 대상을 보내도 서버가 직접 찾음");
+});
+
+Deno.test("싸다구: 벽 너머·울타리 너머는 막히고, 휘두르는 중 맞거나 얼거나 슬라이딩·판 끝이면 취소", () => {
+  for (const kind of ["snow_wall_high", "snow_wall_low", "fence_wood"]) {
+    const room = createRoom("base_camp"), w = room.map.obstacles.find((o) => o.kind === kind)!;
+    const nx = Math.sin(w.rot!), nz = Math.cos(w.rot!), off = (w.hd ?? 0.2) + 0.45;
+    const a = join(room, sock, "a"), b = join(room, sock, "b");
+    for (const p of room.players.values()) if (p.bot) place(p, 45, 45);
+    place(a, w.x - off * nx, w.z - off * nz, Math.atan2(nx, nz)); place(b, w.x + off * nx, w.z + off * nz); b.hist = [];
+    assert(Math.hypot(a.x - b.x, a.z - b.z) < SLAP.range, `${kind} 거리 ${Math.hypot(a.x - b.x, a.z - b.z).toFixed(2)}`);
+    slap(a, 1000);
+    assert(b.hp === 3, `${kind} 너머는 안 맞음`);
+  }
+  const { room, a, b } = duel();
+  handle(a, { t: "sl" }, 1000);
+  room.balls.push({ id: 5, owner: b.id, team: b.team, x: 0, y: 1, z: -0.8, vx: 0, vy: 0.5, vz: 12, age: 0, rewind: null }); // 휘두르는 중 눈덩이에 맞음
+  for (let k = 0; k <= 8; k++) tick(room, 1000 + k * 33);
+  assert(a.hp === 2 && b.hp === 3, `맞으면 싸다구 취소 a ${a.hp} b ${b.hp}`);
+  handle(a, { t: "bs", on: true }, 3000); handle(a, { t: "sl" }, 3100);
+  assert(!a.slapPend, "슬라이딩 중엔 싸다구 못 함");
+  a.slideT = 0; handle(a, { t: "sl" }, 6000); room.game.breakUntil = 12_000; resolveSlap(room, a, 6250); // 휘두르는 사이 판이 끝나 쉬는 중
+  assert(b.hp === 3, "판이 끝나면 취소");
+});
+
+Deno.test("싸다구: 사람이 휘두르면 내 화면에 보이던(조금 전) 상대 자리도 인정", () => {
+  const { room, a, b } = duel();
+  tick(room, 10_000); // b 가 1.6m 앞에 있던 기록
+  place(b, 0, -3.5); // 0.2초 사이 물러남
+  handle(a, { t: "sl" }, 10_000); tick(room, 10_100); tick(room, 10_250);
+  assert(b.hp === 2, "보이던 자리 명중");
+});
+
+// ── 배 슬라이딩: 화면과 같은 함수(maps.js slideMove)로 굴리는 가짜 클라이언트, 4프레임마다 보고 ──────────
+// cheat: 보고 위치를 실제 미끄러진 거리의 몇 배로 부풀려 보냄(속도 조작 클라이언트)
+function slider(room: Room, x: number, z: number, yaw: number, opts: { cheat?: number; want?: number | null; jitter?: (k: number) => number } = {}) {
+  const sent: string[] = [];
+  const a = join(room, { send: (s: string) => sent.push(s) }, "sl");
+  for (const p of room.players.values()) if (p.bot) Object.assign(p, { x: 49, z: 49 });
+  place(a, x, z, yaw); a.moveT = 1000;
+  const s = { v: SLIDE.v0, yaw, t: 0, hit: false }, k = opts.cheat ?? 1;
+  handle(a, { t: "p", x, y: a.y, z, yaw }, 1000);
+  handle(a, { t: "bs", on: true }, 1000);
+  let f = 0, maxDiff = 0, cx = x, cz = z, lastT = 1000;
+  while (!slideOver(s) && f < 300) {
+    [cx, cz] = slideMove(room.map, s, cx, cz, room.map.h(cx, cz), opts.want ?? null, 1 / 60);
+    if (++f % 4 === 0) {
+      const rx = x + (cx - x) * k, rz = z + (cz - z) * k;
+      lastT = Math.max(lastT, 1000 + f * 1000 / 60 + (opts.jitter?.(f / 4) ?? 0)); // 늦게 왔다가 몰려 옴(순서는 그대로)
+      handle(a, { t: "p", x: rx, y: room.map.h(rx, rz), z: rz, yaw: s.yaw }, lastT); maxDiff = Math.max(maxDiff, Math.hypot(a.x - rx, a.z - rz));
+    }
+  }
+  handle(a, { t: "bs", on: false }, 1000 + f * 1000 / 60);
+  const pos = sent.filter((m) => JSON.parse(m).t === "pos").length;
+  return { a, s, sec: f / 60, dist: Math.hypot(cx - x, cz - z), pos, maxDiff };
+}
+
+Deno.test("배 슬라이딩: 평지 약 1.2초·8m, 내리막은 더 길게, 오르막은 짧게, 빙판은 오래 — 서버가 한 번도 위치를 안 고침", () => {
+  const f = slider(flat(), 0, 0, 0);
+  assert(Math.abs(f.sec - 1.22) < 0.05 && f.dist > 7.5 && f.dist < 9.5, `평지 ${f.sec.toFixed(2)}초 ${f.dist.toFixed(1)}m`);
+  assert(f.pos === 0 && f.maxDiff < 1e-6, `평지 보정 ${f.pos}회`);
+  const down = slider(flat("slope", (_x, z) => -0.25 * z), 0, -20, 0), up = slider(flat("slope", (_x, z) => 0.25 * z), 0, -20, 0);
+  assert(down.dist > f.dist + 2 && up.dist < f.dist - 2, `내리막 ${down.dist.toFixed(1)}m 오르막 ${up.dist.toFixed(1)}m`);
+  assert(down.pos === 0 && up.pos === 0, `경사 보정 ${down.pos}/${up.pos}`);
+  const steep = slider(flat("slope", (_x, z) => -0.8 * z), 0, -30, 0);
+  assert(steep.pos === 0 && steep.s.t > SLIDE.maxT && steep.dist > 20, `급경사 내리막: 빨라짐 ${steep.dist.toFixed(1)}m 보정 ${steep.pos}`);
+  const ice = slider(createRoom("lake"), -10, 0, Math.PI / 2); // 가운데 빙판(반지름 24) 평지
+  assert(ice.sec > SLIDE.maxT - 0.05 && ice.dist > f.dist + 5 && ice.pos === 0, `빙판 ${ice.sec.toFixed(2)}초 ${ice.dist.toFixed(1)}m 보정 ${ice.pos}`);
+  const lag = slider(flat("slope", (_x, z) => -0.25 * z), 0, -20, 0, { jitter: (k) => [0, 90, 120, 0, 0, 60, 0, 30][k % 8] });
+  assert(lag.pos === 0, `지연 흔들림(0.09~0.12초) 내리막 보정 ${lag.pos}회`);
+  const turn = slider(flat(), 0, 0, 0, { want: Math.PI / 2 });
+  assert(turn.s.yaw > 1.4 && turn.pos === 0, `조향 ${turn.s.yaw.toFixed(2)}rad`);
+});
+
+Deno.test("배 슬라이딩: 눈벽·나무에 박으면 멈추고 관통 안 함, 머리 쪽도 안 박힘, 맵 경계 밖으로 안 나감", () => {
+  const room = createRoom("base_camp"), w = room.map.obstacles.find((o) => o.kind === "snow_wall_high" && o.hw !== undefined)!;
+  const nx = Math.sin(w.rot!), nz = Math.cos(w.rot!);
+  const side = (px: number, pz: number) => Math.sign((px - w.x) * nx + (pz - w.z) * nz);
+  const r = slider(room, w.x - 5 * nx, w.z - 5 * nz, Math.atan2(nx, nz));
+  assert(r.s.hit && side(r.a.x, r.a.z) < 0 && r.pos === 0, `눈벽 앞에서 멈춤 hit ${r.s.hit} 보정 ${r.pos}`);
+  const [hx, hz] = slideNose(room.map, r.a.x, r.a.z, r.s.yaw, r.a.y);
+  assert(Math.hypot(hx - r.a.x, hz - r.a.z) < 1e-6, "머리 원도 벽 밖");
+  const forest = createRoom("forest"), t = forest.map.obstacles.find((o) => o.kind === "tree" && Math.hypot(o.x, o.z) < 30)!;
+  const tr = slider(forest, t.x, t.z - 6, 0);
+  assert(tr.s.hit && Math.hypot(tr.a.x - t.x, tr.a.z - t.z) >= t.body + 0.39 && tr.pos === 0, `나무 앞에서 멈춤 hit ${tr.s.hit}`);
+  const e = slider(flat(), 0, 45, 0);
+  assert(e.a.z <= 50 + 1e-9, `맵 경계 ${e.a.z}`);
+});
+
+Deno.test("배 슬라이딩 보안: 속도 부풀리기는 거절, 시작 조건(쿨다운·공중·얼음·굴리기·모으기·판 끝), 슬라이딩 중 던지기·모으기 불가", () => {
+  const fast = slider(flat(), 0, 0, 0, { cheat: 1.6 });
+  assert(fast.pos > 0 && fast.a.z < 8.6 + 3.2, `1.6배 속도는 서버가 되돌림 (보정 ${fast.pos}회, 서버 z ${fast.a.z.toFixed(1)}; 정상 8.6m + 기존 이동 여유 3m)`);
+  const noStart = flat(), q = join(noStart, sock, "q"); place(q, 0, 0); q.moveT = 1000;
+  for (let i = 1; i <= 30; i++) handle(q, { t: "p", x: 0, y: 0, z: i, yaw: 0 }, 1000 + i * 66); // 슬라이딩 승인 없이 초속 15m 로 2초
+  assert(q.z < 20, `승인 없는 빠른 이동은 거절 z ${q.z.toFixed(1)} (보낸 30m)`);
+  const room = flat(), a = join(room, sock, "a"); place(a, 0, 0);
+  handle(a, { t: "bs", on: true }, 1000); const t0 = a.slideT;
+  handle(a, { t: "bs", on: false }, 1500); handle(a, { t: "bs", on: true }, 2000);
+  assert(t0 === 1000 && a.slideT === 0, "쿨다운 2.5초 안엔 다시 못 함");
+  handle(a, { t: "bs", on: true }, 3500);
+  assert(a.slideT === 3500, "쿨다운 뒤 다시");
+  const ammo = a.ammo; handle(a, { t: "th", vx: 0, vy: 0, vz: 10 }, 3600); handle(a, { t: "g", on: true }, 3600); handle(a, { t: "r", on: true }, 3600);
+  assert(a.ammo === ammo && !a.gather && !a.roll, "슬라이딩 중 던지기·모으기·굴리기 안 됨");
+  for (const [name, set] of [["공중", (p: P) => { p.y += 1; }], ["얼음", (p: P) => { p.frozenUntil = 1e12; }], ["굴리기", (p: P) => { p.roll = 0.3; }], ["모으기", (p: P) => { p.gather = true; }], ["판 끝", (p: P) => { p.room.game.breakUntil = 1e12; }]] as [string, (p: P) => void][]) {
+    const r = flat(), p = join(r, sock, "p"); place(p, 0, 0); set(p);
+    handle(p, { t: "bs", on: true }, 5000);
+    assert(!p.slideT, `${name} 중엔 시작 못 함`);
+  }
+  handle(a, { t: "bs", on: true }, 9000); room.game.roundEnd = 9100; round(room, 9100);
+  assert(!a.slideT, "판이 끝나면 슬라이딩 멈춤");
+});
+
+Deno.test("배 슬라이딩 중 피격: 누운 판정 구(머리 위로 지나가면 안 맞고 몸통은 맞음), 싸다구 맞으면 멈춤, 3번 맞으면 얼면서 멈춤", () => {
+  const shot = (dy: number) => {
+    const room = flat(), a = join(room, sock, "a"), b = join(room, sock, "b");
+    for (const p of room.players.values()) if (p.bot) place(p, 45, 45);
+    place(b, 0, 0, Math.PI / 2); handle(b, { t: "bs", on: true }, 900); // +x 방향으로 누움
+    room.balls.push({ id: 9, owner: a.id, team: a.team, x: 0, y: dy, z: 5, vx: 0, vy: 1.5, vz: -25, age: 0, rewind: null }); // vy: 0.2초 동안 떨어지는 만큼
+    for (let j = 0; j < 20; j++) tick(room, 1000);
+    return b.hp < 3;
+  };
+  assert(shot(0.5) && shot(1.1), "몸통·머리 높이는 맞음");
+  assert(!shot(1.95), "서 있으면 머리(1.95m)였을 높이는 누우면 지나감");
+  const { room, a, b } = duel();
+  handle(b, { t: "bs", on: true }, 900); slap(a, 1000);
+  assert(b.hp === 2 && !b.slideT, "싸다구 맞으면 경직 + 슬라이딩 멈춤");
+  b.hp = 1; handle(b, { t: "bs", on: true }, 5000);
+  room.balls.push({ id: 10, owner: a.id, team: a.team, x: 0, y: 0.5, z: 1, vx: 0, vy: 0, vz: -25, age: 0, rewind: null });
+  for (let j = 0; j < 10; j++) tick(room, 5100);
+  assert(b.frozenUntil > 5100 && !b.slideT, "얼면 슬라이딩 끝");
+});

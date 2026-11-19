@@ -2,7 +2,7 @@
 // - 히트박스(서버 판정 구 2개)·모델 경계·눈덩이 판정 구·실제 궤적·명중 위치
 // - 화면 예측 명중 ↔ 서버 명중 일치 통계
 // - 판 끝내기(DEV=1 서버만 받아 줌)·내 승리 동작, 캐릭터 수·눈덩이·파티클 부하, 성능 측정
-import { BALL_R, HIT_SPHERES } from './maps.js';
+import { BALL_R, HIT_SPHERES, SLIDE_SPHERES } from './maps.js';
 
 export function initDebug(api) {
   const { THREE, scene, renderer, ents, balls, send, puff } = api;
@@ -113,6 +113,10 @@ export function initDebug(api) {
       if (!e.c.g.parent) { h.box.removeFromParent(); h.box.geometry.dispose(); h.spheres.forEach((m) => m.geometry.dispose()); helpers.delete(e); continue; } // 나간 캐릭터: 표시용 지오메트리도 해제
       h.box.visible = st.show && !!e.c.peng && e.c.g.visible;
       if (h.box.visible && h.n++ % 20 === 0) h.box.box.setFromObject(e.c.peng.root, true);
+      h.spheres.forEach((m, i) => { // 배 슬라이딩 중엔 누운 판정 구(앞뒤로)
+        const [f, y, r] = e.slide ? SLIDE_SPHERES[i] : [0, ...HIT_SPHERES[i]];
+        m.position.set(0, y, f); m.scale.setScalar(r / HIT_SPHERES[i][1]);
+      });
     }
     for (const [id, t] of trails) if (now - t.seen > 2000) { t.line.geometry.dispose(); t.sphere.geometry.dispose(); group.remove(t.line, t.sphere); trails.delete(id); } else if (now - t.seen > 50) t.sphere.visible = false;
     for (let i = marks.length - 1; i >= 0; i--) if (now > marks[i][1]) { marks[i][0].geometry.dispose(); group.remove(marks[i][0]); marks.splice(i, 1); }

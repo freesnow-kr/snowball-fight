@@ -175,10 +175,64 @@ export function segDist(ax, ay, az, bx, by, bz, cx, cy, cz) {
   return Math.hypot(ax + dx * t - cx, ay + dy * t - cy, az + dz * t - cz);
 }
 // 이번 틱에 눈덩이가 지나간 선분 a→b 가 (px,py,pz)에 선 펭귄에 닿았나 (py = 발바닥 높이)
-export function hitsPenguin(ax, ay, az, bx, by, bz, px, py, pz) {
+// 배 슬라이딩 중엔 누운 자세라 구 두 개를 몸 앞뒤로 [앞(+)·뒤(-) m, 발 위 높이, 반지름]. Blender 에서 잰 누운 자세(BellySlide_Loop, 2m 기준):
+// 점퍼 몸통 앞뒤 -0.77~0.18·높이 0~1.04 / 머리·모자·고글 앞뒤 -0.42~0.83·높이 0.84~1.65 (blender/report.json new_clips) + 눈덩이 반지름
+export const SLIDE_SPHERES = [[-0.3, 0.5, 0.7], [0.2, 1.2, 0.7]];
+// slideYaw: 상대가 배 슬라이딩 중이면 그 방향(yaw), 서 있으면 undefined
+export function hitsPenguin(ax, ay, az, bx, by, bz, px, py, pz, slideYaw) {
+  if (slideYaw !== undefined) {
+    const s = Math.sin(slideYaw), c = Math.cos(slideYaw);
+    for (const [f, h, r] of SLIDE_SPHERES) if (segDist(ax, ay, az, bx, by, bz, px + s * f, py + h, pz + c * f) < r) return true;
+    return false;
+  }
   for (const [h, r] of HIT_SPHERES) if (segDist(ax, ay, az, bx, by, bz, px, py + h, pz) < r) return true;
   return false;
 }
+
+// ── 싸다구(근접 공격): 서버가 판정. 거리는 몸 중심끼리(몸 반지름 0.4 둘 + 날개 0.5 + 여유), 정면 ±45°, 쿨다운 1.2초.
+// 누른 뒤 0.25초(애니메이션 임팩트 프레임)에 판정 → 그 사이 맞으면 취소. 맞은 쪽은 0.3초 경직 + 약한 넉백(초속 4m, 0.8m쯤 밀림)
+export const SLAP = { range: 2.3, cos: Math.cos(Math.PI / 4), dy: 1.6, cd: 1200, impact: 250, stun: 300, push: 4 };
+// a → b 사이에 몸을 막는 장애물이 있나(가슴 높이 y). 0.2m 씩 걸으며 그 점이 장애물 안인지 봄(얇은 울타리도 안 건너뜀)
+export function wallBetween(m, ax, az, bx, bz, y) {
+  const d = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(d / 0.2));
+  for (let i = 1; i < n; i++) {
+    const x = ax + (bx - ax) * i / n, z = az + (bz - az) * i / n, [qx, qz] = pushOnce(m, x, z, 0.02, y);
+    if (qx !== x || qz !== z) return true;
+  }
+  return false;
+}
+
+// ── 배 슬라이딩: 시작 속도 = 달리기 7.2 × 1.4, 눈은 마찰로 감속(평지 약 1.2초), 빙판은 오래, 오르막은 빨리 서고 내리막은 덜 서거나 빨라짐.
+// 초속 4m(걷기) 아래로 떨어지거나 2.2초가 지나면 끝. 쿨다운 2.5초, 조향은 초당 1.6rad(약 90°)까지. 서버와 화면이 같은 식으로 속도를 계산
+export const SLIDE = { v0: 7.2 * 1.4, vMin: 4, vMax: 13, maxT: 2.2, cd: 2500, fSnow: 5, fIce: 1.4, g: 9.8, steer: 1.6, nose: 0.55 };
+export const iceAt = (m, x, z) => m.onIce ? m.onIce(x, z) : !!m.ice && Math.hypot(x, z) < m.ice;
+// 진행 방향(dx,dz 단위벡터)으로 dt 초 미끄러진 뒤 속도. 경사 = 진행 방향으로 1m 앞뒤 높이 차
+export function slideSpeed(m, x, z, dx, dz, v, dt) {
+  const slope = m.h(x + dx * 0.5, z + dz * 0.5) - m.h(x - dx * 0.5, z - dz * 0.5);
+  const a = -(iceAt(m, x, z) ? SLIDE.fIce : SLIDE.fSnow) - SLIDE.g * slope;
+  return Math.max(0, Math.min(SLIDE.vMax, v + a * dt));
+}
+// 슬라이딩 충돌체: 서 있을 때와 같은 몸 원(반지름 0.4) + 앞으로 0.55m 머리 원. 머리가 장애물에 닿으면 몸째 밀려남.
+// 몸 원은 그대로라서, 슬라이딩이 끝나 일어설 때 필요한 공간(서 있는 몸 원)은 항상 이미 비어 있음
+export function slideNose(m, x, z, yaw, y) {
+  const s = Math.sin(yaw), c = Math.cos(yaw), nx = x + s * SLIDE.nose, nz = z + c * SLIDE.nose, [px, pz] = pushOut(m, nx, nz, BODY_R, y);
+  return px === nx && pz === nz ? [x, z] : pushOut(m, x + px - nx, z + pz - nz, BODY_R, y);
+}
+// 화면의 슬라이딩 한 프레임(index.html, 서버 테스트의 가짜 화면이 같이 씀). s = { v, yaw, t }, want = 입력 방향(yaw, 없으면 null).
+// 조향은 초당 SLIDE.steer 까지, 속도는 slideSpeed, 벽·나무는 몸 원으로 쓸고(sweep) 머리 원도 밀어냄. 정면으로 박아 절반도 못 가면 s.hit
+export function slideMove(m, s, x, z, y, want, dt) {
+  s.t += dt;
+  if (want !== null) { const d = ((want - s.yaw + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI; s.yaw += Math.max(-SLIDE.steer * dt, Math.min(SLIDE.steer * dt, d)); }
+  const dx = Math.sin(s.yaw), dz = Math.cos(s.yaw);
+  s.v = slideSpeed(m, x, z, dx, dz, s.v, dt);
+  const lim = (v) => Math.max(-50, Math.min(50, v)); // 맵 경계(ARENA)
+  let [nx, nz] = sweep(m, x, z, lim(x + dx * s.v * dt), lim(z + dz * s.v * dt), y);
+  [nx, nz] = slideNose(m, nx, nz, s.yaw, y);
+  s.hit = s.v * dt > 0.02 && Math.hypot(nx - x, nz - z) < s.v * dt * 0.5;
+  return [nx, nz];
+}
+export const slideOver = (s) => s.hit || s.v < SLIDE.vMin || s.t > SLIDE.maxT;
+export const canStand = (m, x, z, y) => { const [px, pz] = pushOut(m, x, z, BODY_R, y); return px === x && pz === z; };
 
 // 점프대 준비는 판정 함수(toLocal·pushOut)가 다 정의된 뒤에
 for (const m of MAPS) setupRamps(m);

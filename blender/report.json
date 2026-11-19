@@ -1,0 +1,189 @@
+{
+  "triangles": 25476,
+  "objects": 39,
+  "penetration": {
+    "rest_joint_overlap_cm": 0.7,
+    "clips": {
+      "Idle": {
+        "ok": true,
+        "frames": 73,
+        "max_extra_penetration_cm": 0.0,
+        "where": "",
+        "min_foot_y": 0.0,
+        "neck_deg": 2.9
+      },
+      "Walk": {
+        "ok": true,
+        "frames": 25,
+        "max_extra_penetration_cm": 0.0,
+        "where": "",
+        "min_foot_y": 0.0,
+        "neck_deg": 3.3
+      },
+      "Run": {
+        "ok": true,
+        "frames": 16,
+        "max_extra_penetration_cm": 0.0,
+        "where": "",
+        "min_foot_y": 0.0,
+        "neck_deg": 9.2
+      },
+      "Jump": {
+        "ok": true,
+        "frames": 31,
+        "max_extra_penetration_cm": 0.43,
+        "where": "sleeve @0.13s, 14cm from shoulder",
+        "min_foot_y": 0.0,
+        "neck_deg": 6.8
+      },
+      "Gather": {
+        "ok": true,
+        "frames": 43,
+        "max_extra_penetration_cm": 0.24,
+        "where": "sleeve @1.17s, 16cm from shoulder",
+        "min_foot_y": 0.0,
+        "neck_deg": 5.7
+      },
+      "Roll": {
+        "ok": true,
+        "frames": 37,
+        "max_extra_penetration_cm": 0.0,
+        "where": "",
+        "min_foot_y": 0.0,
+        "neck_deg": 11.5
+      },
+      "Throw": {
+        "ok": true,
+        "frames": 28,
+        "max_extra_penetration_cm": 1.06,
+        "where": "sleeve @0.07s, 14cm from shoulder",
+        "min_foot_y": 0.0,
+        "neck_deg": 14.2
+      },
+      "Hit": {
+        "ok": true,
+        "frames": 22,
+        "max_extra_penetration_cm": 0.0,
+        "where": "",
+        "min_foot_y": 0.0,
+        "neck_deg": 15.5
+      },
+      "Victory": {
+        "ok": true,
+        "frames": 49,
+        "max_extra_penetration_cm": 0.0,
+        "where": "",
+        "min_foot_y": 0.0,
+        "neck_deg": 10.3
+      }
+    }
+  },
+  "glb_bytes": 927736,
+  "new_clips": {
+    "Slap": {
+      "ok": true,
+      "frames": 19,
+      "max_extra_penetration_cm": 0.97,
+      "where": "sleeve @0.30s, 15cm from shoulder",
+      "min_foot_y": 0.0,
+      "neck_deg": 14.6,
+      "min_body_y": 0.0026,
+      "bbox_game_m": {
+        "min": [
+          -0.91,
+          0.0,
+          -0.76
+        ],
+        "max": [
+          0.88,
+          2.05,
+          0.84
+        ]
+      }
+    },
+    "SlapHit": {
+      "ok": true,
+      "frames": 16,
+      "max_extra_penetration_cm": 0.0,
+      "where": "",
+      "min_foot_y": 0.0,
+      "neck_deg": 18.5,
+      "min_body_y": 0.0026,
+      "bbox_game_m": {
+        "min": [
+          -1.02,
+          0.0,
+          -0.72
+        ],
+        "max": [
+          0.88,
+          2.05,
+          0.66
+        ]
+      }
+    },
+    "BellySlide_Start": {
+      "ok": true,
+      "frames": 9,
+      "max_extra_penetration_cm": 0.0,
+      "where": "",
+      "min_foot_y": 0.0,
+      "neck_deg": 40.1,
+      "min_body_y": 0.0004,
+      "bbox_game_m": {
+        "min": [
+          -0.92,
+          0.0,
+          -1.06
+        ],
+        "max": [
+          0.92,
+          2.11,
+          1.57
+        ]
+      }
+    },
+    "BellySlide_Loop": {
+      "ok": true,
+      "frames": 19,
+      "max_extra_penetration_cm": 0.0,
+      "where": "",
+      "min_foot_y": 0.0,
+      "neck_deg": 40.2,
+      "min_body_y": 0.0001,
+      "bbox_game_m": {
+        "min": [
+          -0.9,
+          0.0,
+          -1.07
+        ],
+        "max": [
+          0.9,
+          1.79,
+          0.85
+        ]
+      }
+    },
+    "BellySlide_End": {
+      "ok": true,
+      "frames": 11,
+      "max_extra_penetration_cm": 0.0,
+      "where": "",
+      "min_foot_y": 0.0,
+      "neck_deg": 40.1,
+      "min_body_y": 0.0004,
+      "bbox_game_m": {
+        "min": [
+          -0.88,
+          0.0,
+          -1.06
+        ],
+        "max": [
+          0.88,
+          2.2,
+          1.03
+        ]
+      }
+    }
+  }
+}
