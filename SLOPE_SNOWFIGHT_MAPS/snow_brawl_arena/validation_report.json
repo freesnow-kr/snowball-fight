@@ -4,20 +4,20 @@
  "json:spawn_points.json": "PASS",
  "json:map_config.json": "PASS",
  "files": {
-  "snow_brawl_arena.blend": 1836658,
+  "snow_brawl_arena.blend": 1836922,
   "snow_brawl_arena.glb": 856280,
   "terrain_collision.json": 176369,
   "colliders.json": 73209,
-  "spawn_points.json": 1143,
+  "spawn_points.json": 1828,
   "map_config.json": 1571,
-  "preview.png": 2250046
+  "preview.png": 2267562
  },
  "all_7_files": "PASS",
  "no_trees": "PASS",
  "spawns": {
-  "count": 12,
-  "min_clearance_m": 5.15,
-  "min_gap_m": 12.94,
+  "count": 20,
+  "min_clearance_m": 2.8,
+  "min_gap_m": 7.82,
   "max_r": 25.0,
   "result": "PASS"
  },

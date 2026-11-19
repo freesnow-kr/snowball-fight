@@ -2,7 +2,7 @@
  "id": "snow_brawl_arena",
  "name": "Snow Brawl Arena",
  "mode": "snow_brawl",
- "max_players": 12,
+ "max_players": 20,
  "size_m": [
   60,
   60

@@ -618,7 +618,7 @@ const arena = () => createRoom("snow_brawl_arena");
 const roll = (p: P, now: number, hold = 0) => { handle(p, { t: "r", on: true }, now); handle(p, { t: "r", on: false }, now + hold); };
 const run = (room: Room, from: number, ms: number) => { for (let t = 0; t <= ms; t += 33) tick(room, from + t); };
 
-Deno.test("개인전: 봇 없음, 최대 인원(12)까지 색이 모두 다름, 그다음은 못 들어감, 나간 색은 다시 쓰고 재접속은 예전 색", () => {
+Deno.test("개인전: 봇 없음, 최대 인원(20)까지 색이 모두 다름, 그다음은 못 들어감, 나간 색은 다시 쓰고 재접속은 예전 색", () => {
   const room = arena(); rooms.set(room.map.id, room);
   const ps = Array.from({ length: BRAWL.max }, (_, i) => join(room, sock, "p" + i));
   assert(![...room.players.values()].some((p) => p.bot), "봇 없음");
@@ -634,10 +634,10 @@ Deno.test("개인전: 봇 없음, 최대 인원(12)까지 색이 모두 다름, 
   rooms.set(room.map.id, createRoom(room.map.id));
 });
 
-Deno.test("개인전: 스폰 12곳이 서로 다르고 장애물 밖, 모두가 적(싸다구 1점·팀 점수 없음)", () => {
+Deno.test("개인전: 스폰 20곳이 서로 다르고 장애물 밖, 모두가 적(싸다구 1점·팀 점수 없음)", () => {
   const room = arena(), ps = Array.from({ length: BRAWL.max }, (_, i) => join(room, sock, "p" + i));
   assert(room.map.spawns![0].length >= BRAWL.max, "스폰 자리가 최대 인원 이상");
-  for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) assert(Math.hypot(ps[i].x - ps[j].x, ps[i].z - ps[j].z) > 10, "스폰 간격");
+  for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) assert(Math.hypot(ps[i].x - ps[j].x, ps[i].z - ps[j].z) > 6.5, "스폰 간격");
   for (const p of ps) { const [x, z] = pushOut(room.map, p.x, p.z); assert(x === p.x && z === p.z, "장애물과 안 겹침"); }
   const [a, b] = ps; place(a, 0, 0, Math.PI); place(b, 0, -1.6);
   handle(a, { t: "sl" }, 1000); run(room, 1000, 300);

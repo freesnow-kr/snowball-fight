@@ -450,7 +450,7 @@ def layout_night_resort(S):
 
 def layout_snow_brawl_arena(S):
     """나무·건물·좁은 통로 없음. 바깥 링 = 높은 눈벽(경계), 안쪽 = 낮은 눈벽·눈더미·눈사람 엄폐물(8방 대칭, 사이 3 m+ 통로).
-    스폰 12곳(개인전 최대 12명)은 링 안쪽 r=25·30° 간격, 엄폐물과 2.5 m+ 떨어진 평탄한 자리(서로 12.9 m 간격, 모두 가운데를 봄)."""
+    스폰 20곳(개인전 최대 20명)은 링 안쪽 r=25·18° 간격(9° 비킴), 엄폐물과 2.5 m+ 떨어진 평탄한 자리(서로 7.8 m 간격, 모두 가운데를 봄)."""
     rnd = random.Random(707); R = S.m.R
     n = math.ceil(2 * math.pi * (R + .5) / 2.9)                 # 3.3 m 벽을 2.9 m 간격으로 → 겹쳐서 틈 없음
     for i in range(n):
@@ -466,7 +466,7 @@ def layout_snow_brawl_arena(S):
     for k in range(6):                                         # 링 밖 장식(설산 앞 눈더미·깃발) — 충돌 없음
         a = k * math.pi / 3 + .3; S.put('snow_pile', 36 * math.cos(a), 36 * math.sin(a), rnd.random() * 6, 1.4, decor=True)
     for k in range(8): a = k * math.pi / 4 + math.pi / 8; S.put('flag_red', (R + 2.2) * math.cos(a), (R + 2.2) * math.sin(a), 0, decor=True)
-    return {'ffa': [(25 * math.cos(k * math.pi / 6), 25 * math.sin(k * math.pi / 6)) for k in range(12)]}
+    return {'ffa': [(25 * math.cos(math.pi / 20 + k * math.pi / 10), 25 * math.sin(math.pi / 20 + k * math.pi / 10)) for k in range(20)]}
 
 LAYOUTS = {'snow_brawl_arena': layout_snow_brawl_arena, 'base_camp': layout_base_camp, 'slope_field': layout_slope_field, 'ice_lake': layout_ice_lake,
            'forest_village': layout_forest_village, 'night_resort': layout_night_resort}
@@ -581,7 +581,7 @@ def render_map(m, S, H):
          'ice_lake': [(-5, 2, .4, 'blue'), (6, -6, -.5, 'pink'), (-12, -9, .8, 'pink'), (13, 3, 2.6, 'blue')],
          'forest_village': [(-3, 1, .3, 'blue'), (4, -4, -.6, 'pink'), (-7, 6, .9, 'pink'), (8, 3, 2.4, 'blue')],
          'night_resort': [(-3, -6, .3, 'blue'), (5, -10, -.6, 'pink'), (-7, -1, .9, 'pink'), (9, -4, 2.4, 'blue')],
-         'snow_brawl_arena': [(7 * math.cos(k * .5236), 7 * math.sin(k * .5236), k * .5236 + 1.57, c) for k, c in enumerate(('#FF6478', '#FFAD54', '#F4D65D', '#63D69A', '#64C8F2', '#648FFF', '#AD83EF', '#F18DCE', '#B8E05C', '#B5835A', '#22252C', '#F5F7FA'))]}[m.id]
+         'snow_brawl_arena': [(7 * math.cos(k * .31416), 7 * math.sin(k * .31416), k * .31416 + 1.57, c) for k, c in enumerate(('#F44336', '#2455E8', '#17A64A', '#963FE0', '#FF8800', '#00B8D9', '#F12A9B', '#8BC900', '#263D8F', '#D99500', '#00A884', '#C13CE0', '#99603B', '#3B9DFF', '#D81B60', '#E6C200', '#008C9E', '#FF6B6B', '#424B59', '#6043C9'))]}[m.id]
     for x, y, yaw, team in P: add_penguin(rc, (x, y, g(x, y)), yaw, team)
     shots = {
         'base_camp': [((-58, -62, 46), (0, 6, 0), 32), ((-28, -13, g(-28, -13) + 1.7), (0, 4, 2), 30), ((-15, -24, 9), (0, -1, 0), 32), ((-16, 5, g(-16, 5) + 2.6), (0, 26, 3.2), 32)],

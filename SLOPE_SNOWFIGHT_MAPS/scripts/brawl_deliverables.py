@@ -37,8 +37,8 @@ wj('colliders.json', {
     'boundary': {'shape': 'ring_wall', 'center': [0, 0], 'inner_radius': RING_R, 'note': f'{sum(o["prop"] == "snow_wall_high" and o["name"].startswith("ring_wall") for o in obs)} snow_wall_high boxes (2.2 m, cannot be jumped) overlapping into a closed ring; server also clamps x,z to ±50'},
     'colliders': [{'name': o['name'], 'kind': o['prop'], 'position': o['position'], 'rotation_y': o['rotation_y'], 'scale': o['scale'], 'hop': o['prop'] in HOP, **o['collider']} for o in obs],
 })
-# 5) 스폰 12곳(개인전 최대 12명): 링 안쪽 r 25·30° 간격, 가운데를 바라봄
-MAX = 12
+# 5) 스폰 20곳(개인전 최대 20명): 링 안쪽 r 25·18° 간격, 가운데를 바라봄
+MAX = 20
 sp = [{'id': i, 'x': round(p[0], 2), 'y': round(p[1], 2), 'z': round(p[2], 2), 'yaw': round(math.atan2(-p[0], -p[2]), 4)} for i, p in enumerate(meta['spawns']['ffa'])]
 wj('spawn_points.json', {'map': MID, 'mode': 'snow_brawl', 'max_players': MAX, 'yaw_note': 'yaw = atan2(dx, dz) facing the arena centre (game convention)', 'spawns': sp})
 # 6) 설정
