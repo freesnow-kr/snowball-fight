@@ -39,6 +39,17 @@
   #start form { display: grid; gap: 12px; background: #ffffff1a; padding: 24px; border-radius: 14px; min-width: 260px; }
   #start input, #start button { font-size: 16px; padding: 8px; border-radius: 8px; border: 0; }
   #start button { background: #ff7a45; color: #fff; font-weight: 700; cursor: pointer; }
+  /* SNOW BRAWL(개인전): 던지기·모으기 버튼 없음, 개인전 칸은 한 줄 전체 */
+  .brawl #btns [data-k=j], .brawl #btns [data-k=f] { display: none; }
+  #maps button.ffa, #maps2 button.ffa { grid-column: 1 / -1; background: linear-gradient(90deg, #ff647855, #f4d65d55, #63d69a55, #648fff55, #ad83ef55); }
+  #result { position: fixed; left: 50%; top: 46%; transform: translate(-50%, -50%); display: none; z-index: 15; pointer-events: none; min-width: min(320px, 86vw);
+    background: #0b2a4ae6; color: #fff; border-radius: 18px; padding: 14px 18px; box-shadow: 0 10px 30px #0006; }
+  #result.open { display: block; }
+  #result h3 { margin: 0 0 8px; text-align: center; font-size: 20px; }
+  #result .row { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 10px; font-weight: 700; }
+  #result .row.win { background: #ffd16633; box-shadow: inset 0 0 0 2px #ffd166; }
+  #result .dot { width: 16px; height: 16px; border-radius: 50%; flex: none; box-shadow: 0 0 0 2px #fff8; }
+  #result .name { flex: 1; } #result .pts { font-variant-numeric: tabular-nums; }
   #maps, #maps2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
   #maps button, #maps2 button { background: #ffffff22; border: 2px solid transparent; min-height: 52px; font-size: 15px; }
   #maps button.on, #maps2 button.on { border-color: #ffd166; background: #ffffff40; }
@@ -59,7 +70,7 @@
   #btns button.on { background: #ffd166; }
   /* 싸다구·슬라이딩 쿨다운: 남은 시간만큼 어두운 부채꼴(--cd 1 → 0) */
   #btns button { position: relative; overflow: hidden; }
-  #btns button[data-k=q]::after, #btns button[data-k=c]::after { content: ''; position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+  #btns button[data-k=q]::after, #btns button[data-k=c]::after, .brawl #btns button[data-k=r]::after { content: ''; position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
     background: conic-gradient(#0b2a4a80 calc(var(--cd, 0) * 360deg), transparent 0); }
   #btns button[data-k=c] { font-size: 20px; }
   #btns .big { grid-column: 1 / -1; width: 84px; height: 84px; font-size: 30px; background: #ff7a45ee; color: #fff; }
@@ -280,6 +291,7 @@ window.LOAD = (() => {
 <div id="board"></div>
 <div id="teams"></div>
 <div id="banner"></div>
+<div id="result"></div>
 <div id="msg"></div>
 <div id="touch">
   <div id="joy"><div id="knob"></div></div>
@@ -306,6 +318,7 @@ window.LOAD = (() => {
     <tr><td>굴려서 놓기</td><td><kbd>R</kbd> 꾹 → 떼기 (3단이면 눈사람)</td></tr>
     <tr><td>이모트 · 맵</td><td><kbd>1</kbd>~<kbd>6</kbd> · <kbd>M</kbd></td></tr>
     <tr><td>사용법</td><td><kbd>H</kbd></td></tr>
+    <tr><td>🥊 SNOW BRAWL</td><td>개인전: 던지기 대신 <kbd>R</kbd> 꾹 → 떼면 눈이 굴러가요(2점, 쿨다운 2초) · 싸다구 1점</td></tr>
   </table>
   <table class="mo">
     <tr><td>이동 · 달리기</td><td>조이스틱 · 끝까지 밀면 달리기</td></tr>
@@ -317,6 +330,7 @@ window.LOAD = (() => {
     <tr><td>눈 모으기</td><td>🤲 꾹</td></tr>
     <tr><td>굴려서 놓기</td><td>⚪ 꾹 → 떼기 (3단이면 눈사람)</td></tr>
     <tr><td>이모트 · 맵</td><td>😀 · 🗺️</td></tr>
+    <tr><td>🥊 SNOW BRAWL</td><td>개인전: 던지기 대신 ⚪ 꾹 → 떼면 눈이 굴러가요(2점) · 🖐️ 싸다구 1점</td></tr>
   </table>
 </div></div>
 <div id="bug"><form>
@@ -359,11 +373,13 @@ window.LOAD = (() => {
 <script type="module" onerror="LOAD.fail('engine')">
 import * as THREE from 'three';
 import { loadPenguin, Penguin } from './penguin.js';
-import { blocksBall, canStand, GRAVITY, hitsPenguin, iceAt, JUMP_V, MAPS, mapById, pushOut, rampLaunch, SLAP, SLIDE, slideMove, slideNose, slideOver, sweep } from './maps.js';
+import { blocksBall, BRAWL, canStand, GRAVITY, hitsPenguin, iceAt, isBrawl, JUMP_V, MAPS, mapById, pushOut, rampLaunch, rollStep, SLAP, SLIDE, slideMove, slideNose, slideOver, sweep } from './maps.js';
 import { loadMap, releaseGPU } from './mapglb.js';
 LOAD.step('engine', 1); // three.js·게임 코드를 다 받아 실행 시작
 
 const TEAM_COLORS = ['#ff65a8', '#2f7bff'], TEAM_NAMES = ['💗 핑크팀', '🔵 블루팀'], TEAM_DOTS = ['💗', '🔵'];
+// 개인전: team = 2 + 색 번호 → 펭귄 의상·이름표·순위표 색
+const colorOf = (team) => team >= 2 ? BRAWL.colors[team - 2] : null;
 const EMOTE_FACE = ['excited', 'excited', 'focused', 'heart', 'wink', 'normal']; // 이모트(👋😂😡❤️😎🙏) 동안 얼굴
 const ARENA = 50, MAX_AMMO = 10, G = -15, EMOTES = ['👋', '😂', '😡', '❤️', '😎', '🙏'];
 const $ = (id) => document.getElementById(id);
@@ -514,6 +530,7 @@ function buildMap(id) {
   if (mapRoot) { releaseGPU(mapRoot); mapRoot = null; } // Blender 맵: GPU 만 놓고 객체는 캐시에 남김
   mapToken++;
   map = mapById(id); H = map.h; world = new THREE.Group(); chairs = [];
+  document.body.classList.toggle('brawl', isBrawl(map));
   const sky = map.sky ?? SKY[map.id];
   scene.background.set(sky[0]); scene.fog.color.set(sky[1]);
   applyEnv(map); dbg?.onMap?.(map);
@@ -620,11 +637,11 @@ LOAD.task('gpu', async () => {
 function makeChar(name, team) {
   const g = new THREE.Group(), ice = makeIce(), body = new THREE.Group();
   const ball = add(g, sphere(1), M.white); ball.visible = false;
-  const tag = textSprite(name, 40, ['#ffc6df', '#b9d4ff'][team] ?? '#fff'); tag.position.y = 2.55;
+  const tag = textSprite(name, 40, colorOf(team) ?? ['#ffc6df', '#b9d4ff'][team] ?? '#fff'); tag.position.y = 2.55;
   const emo = textSprite('', 48); emo.position.y = 3.15; emo.visible = false;
   g.add(body, ice, tag, emo); scene.add(g);
   const c = { g, body, ice, ball, tag, emo, peng: null };
-  loadPenguin().then((a) => { if (!c.gone) { c.peng = new Penguin(a, team); body.add(c.peng.root); } });
+  loadPenguin().then((a) => { if (!c.gone) { c.peng = new Penguin(a, team, colorOf(team)); body.add(c.peng.root); } });
   return c;
 }
 
@@ -634,7 +651,7 @@ const balls = new Map(); // id -> { mesh, x,y,z, vx,vy,vz, age }
 const piles = new Map(); // id -> Group
 const parts = [];
 const me = { x: 0, y: 0, z: 30, yaw: Math.PI, vy: 0, kx: 0, kz: 0, mvx: 0, mvz: 0, // mvx·mvz: 가속·감속이 붙은 실제 이동 속도
-  slide: null, slideAt: -1e9, slapAt: -1e9, stunUntil: 0 }; // 배 슬라이딩 상태 { v, yaw, t }·마지막 시작 시각(쿨다운), 싸다구 맞은 경직 끝
+  slide: null, slideAt: -1e9, slapAt: -1e9, stunUntil: 0, rollAt: -1e9 }; // rollAt: 개인전 굴린 눈 보낸 시각(쿨다운) // 배 슬라이딩 상태 { v, yaw, t }·마지막 시작 시각(쿨다운), 싸다구 맞은 경직 끝
 let myId = 0, roundBreak = false, bannerUntil = 0, spawned = false, camYaw = Math.PI, viewYaw = Math.PI, camDist = 7.5, pitch = 0.36, jump = false, shake = 0, lastSend = 0, lastSent = '', flashUntil = 0, flashText = '';
 const keys = new Set();
 
@@ -712,6 +729,13 @@ function starBurst(x, y, z) {
     stars.push({ x, y, z, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp + (i ? 1 : 0), vz: Math.sin(a + 1) * sp * 0.5, s: i ? 0.45 : 1.1, life: 0.35, spin: (Math.random() - 0.5) * 8 });
   }
 }
+// 개인전 굴린 눈: 서버 'rl' 로 출발 → 화면도 같은 식(maps.js rollStep)으로 굴림, 'rlh'(맞음)·'rlx'(부서짐)에 지움
+const rolls = new Map(); // id -> { mesh, x, z, dx, dz, r, d, stop, fx }
+function removeRoll(id, burst) {
+  const b = rolls.get(id); if (!b) return;
+  if (burst) puff(b.x, H(b.x, b.z) + b.r, b.z, 12);
+  scene.remove(b.mesh); rolls.delete(id);
+}
 // 슬라이딩 자국: 납작한 사각형 InstancedMesh 하나에 최근 160개(돌려 씀). 지면 기울기에 맞춰 눕히고 3초 뒤 1초에 걸쳐 가늘어지며 사라짐
 const TRAIL_MAX = 160, trail = [];
 const trailMesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.55, 0.5).rotateX(-Math.PI / 2),
@@ -740,13 +764,16 @@ let ws, hello, backoff = 1000;
 const send = (m) => ws?.readyState === 1 && ws.send(JSON.stringify(m));
 function connect() {
   ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
-  ws.onopen = () => { backoff = 1000; send({ t: 'hello', ...hello }); };
+  ws.onopen = () => { backoff = 1000; send({ t: 'hello', ...hello, color: sessionStorage.brawlColor }); }; // color: 개인전 재접속 때 예전 색
   ws.onmessage = (e) => onMsg(JSON.parse(e.data));
   ws.onclose = () => { flash('연결이 끊겼어요. 다시 접속하는 중…', backoff + 500); setTimeout(connect, backoff); backoff = Math.min(backoff * 2, 10000); };
 }
 function onMsg(m) {
   if (m.t === 'ping') return send({ t: 'pong', ts: m.ts }); // 서버가 왕복 시간을 재서 명중 되감기에 씀
-  if (m.t === 'full') return flash('방이 모두 꽉 찼어요. 잠시 뒤 다시 들어가 볼게요', 4000);
+  if (m.t === 'full') {
+    if (isBrawl(mapById(hello.map))) { hello.map = 'auto'; return flash('SNOW BRAWL 방이 꽉 찼어요(8명). 팀전으로 갈게요', 4000); }
+    return flash('방이 모두 꽉 찼어요. 잠시 뒤 다시 들어가 볼게요', 4000);
+  }
   if (m.t === 'pos') { Object.assign(me, { x: m.x, y: m.y, z: m.z, vy: 0, kx: 0, kz: 0, mvx: 0, mvz: 0 }); endSlide(); lastSent = ''; return; } // 서버가 이동을 거절 → 서버 위치로(슬라이딩도 끝)
   if (m.t === 'welcome') {
     for (const id of [...ents.keys()]) removeEnt(id);
@@ -757,6 +784,8 @@ function onMsg(m) {
     myId = m.id; spawned = false; mySeqs.clear(); me.slide = null;
     for (const [id, name, team, bot] of m.players) addEnt(id, name, team, bot); // server.ts meta 순서: id, 이름, 팀, 봇
     for (const p of m.piles) setPile(p);
+    for (const id of [...rolls.keys()]) removeRoll(id);
+    const t = ents.get(myId)?.team; if (t >= 2) sessionStorage.brawlColor = t - 2; // 개인전: 다시 들어올 때 같은 색 부탁
     return;
   }
   for (const ev of m.ev) onEv(ev);
@@ -821,6 +850,39 @@ function onEv(ev) {
       if (aid === myId) shake = Math.max(shake, 0.12);
       break;
     }
+    case 'rl': { // 굴린 눈 출발
+      const [, id, owner, x, z, dx, dz, r] = ev;
+      const mesh = add(scene, sphere(r), M.white, x, H(x, z) + r, z);
+      rolls.set(id, { mesh, x, z, dx, dz, r, d: 0, stop: false, fx: 0 });
+      if (owner === myId) me.rollAt = performance.now();
+      sfx(180, 0.15, owner === myId ? 0.12 : 0.05);
+      break;
+    }
+    case 'rlx': removeRoll(ev[1], true); break;
+    case 'rlh': { // 굴린 눈 명중(서버 판정): 맞은 쪽 휘청 + 별 + 눈꽃, 나면 넉백·경직·흔들림
+      const [, id, tid, x, z, kx, kz] = ev, t = ents.get(tid), now = performance.now();
+      removeRoll(id, false);
+      puff(x, H(x, z) + 0.6, z, 18);
+      if (t) { t.hitT = now; starBurst(t.x ?? x, (t.y ?? 0) + 1.35, t.z ?? z); }
+      if (tid === myId) { me.kx += kx; me.kz += kz; me.stunUntil = now + SLAP.stun; shake = Math.max(shake, 0.35); me.slide = null; sfx(150, 0.22, 0.28); }
+      else sfx(240, 0.12, 0.1);
+      break;
+    }
+    case 'ffa': { // 개인전 판 끝: 개인 순위 [id, 순위, 점수, 얼음]. 1위(공동 포함)는 승리 동작
+      endSlide();
+      const rows = ev[1], now = performance.now(), mineR = rows.find((r) => r[0] === myId);
+      const box = $('result'), h = document.createElement('h3'); h.textContent = '🥊 SNOW BRAWL 결과';
+      box.replaceChildren(h, ...rows.map(([id, rank, pts]) => {
+        const e = ents.get(id), d = document.createElement('div'), dot = span('dot', ''), win = rank === 1;
+        if (e) e.victoryUntil = win ? now + 5500 : 0;
+        d.className = 'row' + (win ? ' win' : ''); dot.style.background = colorOf(e?.team) ?? '#fff';
+        d.append(span('rk', `${win ? '👑' : rank + '위'}`), dot, span('name', `${e?.name ?? '?'}${id === myId ? ' (나)' : ''}`), span('pts', `${pts}점`));
+        return d;
+      }));
+      box.classList.add('open'); setTimeout(() => box.classList.remove('open'), 5500);
+      sfx(mineR?.[1] === 1 ? 660 : 220, 0.5, 0.2);
+      break;
+    }
     case 'over': {
       endSlide(); // 판이 끝나면 하던 동작 멈춤(서버도 같이)
       const [, w, a, b] = ev, my = ents.get(myId)?.team;
@@ -831,7 +893,7 @@ function onEv(ev) {
       sfx(w === my ? 660 : 220, 0.5, 0.2);
       break;
     }
-    case 'round': spawned = false; me.slide = null; banner('새 판 시작! ⛄', 2000); break;
+    case 'round': spawned = false; me.slide = null; $('result').classList.remove('open'); banner(isBrawl(map) ? '새 판 시작! 🥊 모두가 적!' : '새 판 시작! ⛄', 2000); break;
     case 'pile': setPile(ev[1]); sfx(330, 0.1, 0.06); break;
     case 'pilex': if (piles.has(ev[1])) { scene.remove(piles.get(ev[1])); disposeTree(piles.get(ev[1])); } piles.delete(ev[1]); break;
     case 'emo': {
@@ -845,14 +907,26 @@ function onEv(ev) {
 }
 const banner = (text, ms) => { $('banner').textContent = text; bannerUntil = performance.now() + ms; };
 const span = (cls, text) => { const e = document.createElement('span'); e.className = cls; e.textContent = text; return e; };
+// 개인전 순위: 점수 높은 순, 같은 점수는 같은 순위(서버 ranking 과 같은 기준)
+const rankOf = (e) => 1 + [...ents.values()].filter((o) => o.score > e.score).length;
 function drawTeams(ts, tl) {
   const my = ents.get(myId)?.team, mm = Math.floor(tl / 60), ss = String(tl % 60).padStart(2, '0');
+  if (isBrawl(map)) { // 개인전: 1위 · 남은 시간
+    const top = [...ents.values()].sort((a, b) => b.score - a.score)[0], dot = span('dot', '●');
+    if (top) dot.style.color = colorOf(top.team);
+    return $('teams').replaceChildren(span('', '👑'), dot, span('', top ? `${top.name} ${top.score}점` : '-'), span('time', roundBreak ? '쉬는 중' : `${mm}:${ss}`));
+  }
   $('teams').replaceChildren(span('t0' + (my === 0 ? ' mine' : ''), `${TEAM_DOTS[0]} ${ts[0]}`), span('', ':'),
     span('t1' + (my === 1 ? ' mine' : ''), `${ts[1]} 🔵`), span('time', roundBreak ? '쉬는 중' : `${mm}:${ss}`));
 }
 function drawBoard() {
   const top = [...ents.values()].sort((a, b) => b.score - a.score).slice(0, isTouch ? 3 : 5); // 폰은 버튼과 안 겹치게 3위까지
-  const rows = top.map((e, i) => { const d = document.createElement('div'); d.textContent = `${i + 1}. ${TEAM_DOTS[e.team] ?? ''} ${e.name}  🎯${e.score} 🥶${e.freezes ?? 0}`; return d; });
+  const rows = top.map((e, i) => {
+    const d = document.createElement('div');
+    if (e.team < 2) { d.textContent = `${i + 1}. ${TEAM_DOTS[e.team] ?? ''} ${e.name}  🎯${e.score} 🥶${e.freezes ?? 0}`; return d; }
+    const dot = span('', '● '); dot.style.color = colorOf(e.team); // 개인전: 펭귄 색 점
+    d.append(`${rankOf(e)}. `, dot, `${e.name}  🎯${e.score}점 🥶${e.freezes ?? 0}`); return d;
+  });
   const title = document.createElement('b'); title.textContent = `🏆 ${map.emoji} ${map.name} (${ents.size}명)`;
   $('board').replaceChildren(title, ...rows);
 }
@@ -873,7 +947,9 @@ function mapButtons(el, opts, selected, onPick) {
   el.replaceChildren(...opts.map((o) => {
     const b = document.createElement('button'), small = document.createElement('small');
     b.type = 'button'; b.className = o.id === selected ? 'on' : '';
-    b.append(`${o.emoji} ${o.name}`); small.textContent = o.note; b.append(small);
+    if (isBrawl(mapById(o.id)) && o.id !== 'auto') { b.classList.add('ffa'); b.append('🥊 SNOW BRAWL — 개인전'); small.textContent = `${o.note} · 팀 없이 모두가 적! 눈을 굴리고 싸다구를 날려 최후의 승자가 되어보세요!`; }
+    else { b.append(`${o.emoji} ${o.name}`); small.textContent = o.note; }
+    b.append(small);
     b.onclick = () => onPick(o.id);
     return b;
   }));
@@ -882,7 +958,7 @@ function drawMaps() {
   const total = roomList.reduce((a, r) => a + r.humans, 0);
   // 입장 화면 목록(입장하면 입장 화면이 사라짐)
   if ($('maps')) mapButtons($('maps'), [{ id: 'auto', emoji: '🎲', name: '자동', note: total ? '사람 많은 방으로' : '아무 방이나' },
-    ...roomList.map((r) => ({ ...r, note: `${r.humans}명 있음` }))], chosenMap,
+    ...roomList.map((r) => ({ ...r, note: isBrawl(mapById(r.id)) ? `${r.humans}/${BRAWL.max}명` : `${r.humans}명 있음` }))], chosenMap,
     (id) => { chosenMap = id; if (id !== 'auto') buildMap(id); drawMaps(); });
   if ($('mapMenu').classList.contains('open')) // 게임 중 맵 바꾸기 창
     mapButtons($('maps2'), roomList.map((r) => ({ ...r, note: r.id === map.id ? '지금 여기' : `${r.humans}명 있음` })), map.id, switchMap);
@@ -1034,6 +1110,8 @@ LOAD.task('server', async () => { // 서버가 응답해야 입장할 수 있음
 // 키보드와 터치 버튼이 함께 쓰는 동작
 function press(k) {
   if (keys.has(k)) return;
+  if (isBrawl(map) && k === 'f') return; // 개인전: 눈 모으기 없음(움직임도 안 멈춤)
+  if (isBrawl(map) && k === 'r' && performance.now() - me.rollAt < BRAWL.rollCd) return; // 굴린 눈 쿨다운
   keys.add(k);
   if (k === 'f') send({ t: 'g', on: true });
   if (k === 'r') send({ t: 'r', on: true });
@@ -1115,7 +1193,7 @@ for (const b of document.querySelectorAll('#btns button')) {
   });
   for (const t of ['pointerup', 'pointercancel']) b.addEventListener(t, () => { b.classList.remove('on'); if (k !== 'emo') release(k); });
 }
-const slapBtn = document.querySelector('#btns [data-k=q]'), slideBtn = document.querySelector('#btns [data-k=c]');
+const slapBtn = document.querySelector('#btns [data-k=q]'), slideBtn = document.querySelector('#btns [data-k=c]'), rollBtn = document.querySelector('#btns [data-k=r]');
 EMOTES.forEach((em, i) => {
   const b = document.createElement('button');
   b.textContent = em;
@@ -1200,6 +1278,7 @@ function launch(tx, ty, tz) {
 }
 function throwAt(p) {
   const e = ents.get(myId), now = performance.now();
+  if (isBrawl(map)) return flash(isTouch ? 'SNOW BRAWL 에선 못 던져요 · ⚪ 꾹 → 떼서 굴리기' : 'SNOW BRAWL 에선 못 던져요 · R 꾹 → 떼서 굴리기', 1200);
   if (!e || e.frozen || roundBreak || now - lastThrowAt < THROW_CD) return;
   if (e.roll) return flash(isTouch ? '굴리는 중엔 못 던져요 (⚪ 굴리기에서 손 떼기)' : '굴리는 중엔 못 던져요 (R 떼기)');
   if (me.slide) return flash('미끄러지는 중엔 못 던져요');
@@ -1365,6 +1444,16 @@ renderer.setAnimationLoop(() => {
   while (trail.length && now - trail[0].t > 4000) trail.shift();
   trail.forEach((m, i) => { const k = Math.min(1, Math.max(0.001, (4000 - (now - m.t)) / 1000)); trailMesh.setMatrixAt(i, partTmp.matrix.compose(tmp.set(m.x, m.y, m.z), m.q, partTmp.scale.set(k, 1, 1))); });
   trailMesh.count = trail.length; trailMesh.instanceMatrix.needsUpdate = trail.length > 0;
+  // 개인전 굴린 눈: 서버와 같은 식으로 굴림(부딪혀 멈추면 서버 'rlx' 를 기다림), 구르는 회전 + 눈가루
+  for (const b of rolls.values()) {
+    if (!b.stop && rollStep(map, b, dt)) b.stop = true;
+    const gy = H(b.x, b.z);
+    b.mesh.position.set(b.x, gy + b.r, b.z);
+    if (!b.stop) {
+      b.mesh.rotateOnWorldAxis(tmp.set(b.dz, 0, -b.dx).normalize(), BRAWL.rollV * dt / b.r);
+      if ((b.fx += dt) > 0.06 && Math.hypot(b.x - camT.x, b.z - camT.z) < 40) { b.fx = 0; if (parts.length >= PART_MAX) parts.shift(); parts.push({ x: b.x - b.dx * b.r, y: gy + 0.1, z: b.z - b.dz * b.r, vx: (Math.random() - 0.5) * 2, vy: 1 + Math.random(), vz: (Math.random() - 0.5) * 2, life: 0.4 }); }
+    }
+  }
   // 싸다구 별
   let sn = 0;
   for (const st of stars) {
@@ -1429,9 +1518,12 @@ renderer.setAnimationLoop(() => {
   // HUD
   // 싸다구·슬라이딩 쿨다운: 폰은 버튼 위 부채꼴, PC 는 HUD 글자
   const cdSlap = Math.max(0, 1 - (now - me.slapAt) / SLAP.cd), cdSlide = me.slide ? 1 : Math.max(0, 1 - (now - me.slideAt) / SLIDE.cd);
-  if (isTouch) for (const [b, f] of [[slapBtn, cdSlap], [slideBtn, cdSlide]]) { const v = f.toFixed(2); if (b.dataset.cdv !== v) { b.dataset.cdv = v; b.style.setProperty('--cd', v); } }
+  const brawlOn = isBrawl(map), cdRoll = Math.max(0, 1 - (now - me.rollAt) / BRAWL.rollCd);
+  if (isTouch) for (const [b, f] of [[slapBtn, cdSlap], [slideBtn, cdSlide], [rollBtn, brawlOn ? cdRoll : 0]]) { const v = f.toFixed(2); if (b.dataset.cdv !== v) { b.dataset.cdv = v; b.style.setProperty('--cd', v); } }
   const cdTxt = (f, ms) => f > 0 ? `${(f * ms / 1000).toFixed(1)}초` : '준비';
-  if (mine) $('hud').textContent = `❤️ ${'●'.repeat(mine.hp)}   ❄️ ${mine.ammo}/${MAX_AMMO}\n🎯 맞힘 ${mine.score} · 🥶 얼음 ${mine.freezes ?? 0}`
+  if (mine && brawlOn) $('hud').textContent = `❤️ ${'●'.repeat(mine.hp)}   🎯 ${mine.score}점\n🏅 ${rankOf(mine)}위/${ents.size}명 · 🥶 얼음 ${mine.freezes ?? 0}`
+    + (isTouch ? '' : `\n⚪ R ${mine.roll ? '굴리는 중' : cdTxt(cdRoll, BRAWL.rollCd)} · 🖐️ Q ${cdTxt(cdSlap, SLAP.cd)} · 🐧💨 C ${me.slide ? '미끄러지는 중' : cdTxt(cdSlide, SLIDE.cd)}`);
+  else if (mine) $('hud').textContent = `❤️ ${'●'.repeat(mine.hp)}   ❄️ ${mine.ammo}/${MAX_AMMO}\n🎯 맞힘 ${mine.score} · 🥶 얼음 ${mine.freezes ?? 0}`
     + (isTouch ? '' : `\n🖐️ Q ${cdTxt(cdSlap, SLAP.cd)} · 🐧💨 C ${me.slide ? '미끄러지는 중' : cdTxt(cdSlide, SLIDE.cd)}`);
   $('banner').style.display = now < bannerUntil ? '' : 'none';
   $('msg').textContent = mine?.frozen ? '🧊 꽁꽁 얼었어요! 3초 뒤 풀려요'

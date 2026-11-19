@@ -19,6 +19,15 @@ blender --background --python scripts/generate_maps.py -- base_camp --no-render 
 | `scripts/render_preview.py` | EEVEE 1920×1080 렌더(렌더 전용 조명·하늘) |
 | `scripts/export_game_data.py` | 메타데이터 → 게임 데이터 모듈 `../maps_glb.js` (Blender 불필요) |
 
+## 개인전 맵 Snow Brawl Arena
+
+```sh
+blender --background --python scripts/generate_maps.py -- snow_brawl_arena   # blend · glb · metadata · renders
+blender --background --python scripts/brawl_deliverables.py                 # → snow_brawl_arena/ 결과물 7종 + validation_report.json
+```
+
+`snow_brawl_arena/` 에 `snow_brawl_arena.blend`·`.glb`(압축 전)·`terrain_collision.json`(높이·경사 101×101)·`colliders.json`(장애물·바깥 눈벽 링)·`spawn_points.json`(8곳)·`map_config.json`·`preview.png`. 검증 스크립트가 GLB 를 다시 불러와 메시·재질, 지형 정점 ↔ 높이 격자, 오브젝트 위치, 스폰 ↔ 장애물 거리, 나무 없음을 확인. 지름 60m 원형(높은 눈벽 링), 안쪽 경사 1.3° 이하, 낮은 눈벽·눈더미·눈사람 엄폐물
+
 ## 게임에 넣기
 
 맵을 다시 만든 뒤에는 게임 데이터도 다시 뽑습니다(서버·화면이 같이 씀):

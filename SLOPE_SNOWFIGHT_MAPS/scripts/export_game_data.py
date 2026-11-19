@@ -9,7 +9,8 @@ import base64, json, os, struct
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(os.path.dirname(ROOT), 'maps_glb.js')
 MAPS = [('base_camp', '베이스 캠프', '🏕️'), ('slope_field', '슬로프 필드', '🎿'), ('ice_lake', '아이스 레이크', '❄️'),
-        ('forest_village', '포레스트 빌리지', '🏡'), ('night_resort', '나이트 리조트', '🌙')]
+        ('forest_village', '포레스트 빌리지', '🏡'), ('night_resort', '나이트 리조트', '🌙'),
+        ('snow_brawl_arena', '스노우 브롤 아레나', '🥊')]  # 개인전(SNOW BRAWL) 전용: mode 'brawl', 스폰은 한 묶음 8곳
 r2 = lambda v: round(v, 2)
 # 점프로 넘을 수 있는 낮은 장애물(발이 꼭대기보다 높으면 통과). 울타리는 경계라서, 높은 벽·오두막·나무·절벽·점프대는 늘 막음
 HOP = {'snow_wall_low', 'snow_pile', 'bench', 'tree_stump'}
@@ -38,10 +39,11 @@ def main():
         env = meta['environment']
         lights = env.get('lights', [])  # 화면이 고정(조명탑 스포트)·순환(가로등·산장 중 가까운 곳) 조명으로 나눠 씀
         m = {'id': mid, 'name': name, 'emoji': emoji, 'glb': f'/assets/maps/{mid}.glb', 'n': len(H),
-             'heights': base64.b64encode(raw).decode(), 'spawns': [[[r2(p[0]), r2(p[2])] for p in meta['spawns'][t]] for t in ('pink', 'blue')],
+             'heights': base64.b64encode(raw).decode(), 'spawns': [[[r2(p[0]), r2(p[2])] for p in meta['spawns'][t]] for t in (('ffa',) if 'ffa' in meta['spawns'] else ('pink', 'blue'))],
              'sky': [env['background_horizon'] if env['preset'] == 'night' else env['background_top'], env['fog']['color']], 'fog': [env['fog']['near'], env['fog']['far']],
              'env': {'preset': env['preset'], 'hemisphere': env['hemisphere'], 'sun': env.get('sun') or env.get('moon'), 'lights': lights},
              'obstacles': obstacles(meta)}
+        if 'ffa' in meta['spawns']: m['mode'] = 'brawl'
         if 'ice_zone' in meta:
             z = meta['ice_zone']; m['ice'] = {'x': z['center'][0], 'z': z['center'][2], 'rx': z['radius_x'], 'rz': z['radius_z']}
         maps.append(m)

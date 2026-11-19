@@ -1,6 +1,7 @@
 // 게임 캐릭터: Blender로 만든 블루 펭귄 GLB(assets/penguin_blue.glb) 한 벌로 팀 색·표정·동작을 모두 처리한다.
 // - GLB는 한 번만 내려받아 캐싱. 캐릭터마다 SkeletonUtils.clone → 지오메트리는 공유, 뼈·애니메이션 상태는 따로
 // - 팀 0 = 핑크(의상 재질 4개만 팀당 한 번 복제해 색만 바꿈), 팀 1 = 블루(GLB 원본 재질 그대로)
+// - 개인전: new Penguin(a, team, '#rrggbb') → 그 색 의상 재질 4개를 색마다 한 번 복제(캐시). 공유 원본 재질은 안 바꿈 → 다른 펭귄 색이 같이 안 바뀜
 // - 키를 TARGET_HEIGHT(2m)에 맞춰 키움: 서버 명중 판정(발 위 1m 중심, 반지름 0.9m)과 같은 높이
 // - 표정: GLB 안의 얼굴 부품 메시(extras.expressions 목록)를 켜고 끄기만 함. 다시 불러오지 않음
 import * as THREE from 'three';
@@ -43,19 +44,28 @@ export function loadPenguin(url = PENGUIN_URL, onProgress = null) {
       if (!m) { console.warn('penguin: 재질 없음', name); continue; }
       pink[name] = m.clone(); pink[name].color.set(hex); pink[name].name = name.replace('blue', 'pink');
     }
-    return { gltf, scale: TARGET_HEIGHT / h, footY: rest.min.y, clips, expressions, teamMats: [pink, null] };
+    return { gltf, scale: TARGET_HEIGHT / h, footY: rest.min.y, clips, expressions, teamMats: [pink, null], baseMats: found, colorMats: {} };
   });
   asset.catch(() => { asset = null; });
   return asset;
 }
 
+// 개인전 색 한 벌: 점퍼·모자는 그 색, 점퍼 테두리·고글 끈은 조금 어둡게. 얼굴·배·고글 렌즈·발은 원래 재질 그대로
+function colorMats(a, hex) {
+  return (a.colorMats[hex] ??= Object.fromEntries(Object.keys(PINK_OUTFIT).filter((n) => a.baseMats.has(n)).map((n) => {
+    const m = a.baseMats.get(n).clone(); m.color.set(hex);
+    if (n === 'jacket_trim_blue' || n === 'goggle_strap_blue') m.color.multiplyScalar(0.8);
+    m.name = n.replace('blue', hex.slice(1)); return [n, m];
+  })));
+}
+
 export class Penguin {
-  constructor(a, team) {
+  constructor(a, team, hex = null) {
     this.root = new THREE.Group();
     this.model = cloneSkinned(a.gltf.scene);
     this.model.scale.setScalar(a.scale);
     this.model.position.y = -a.footY * a.scale; // 발바닥을 정확히 y=0 에
-    const mats = a.teamMats[team] ?? null;
+    const mats = hex ? colorMats(a, hex) : a.teamMats[team] ?? null;
     this.parts = new Map(); // 얼굴 부품 이름 → 메시
     const face = new Set(Object.values(a.expressions).flat());
     this.model.traverse((o) => {

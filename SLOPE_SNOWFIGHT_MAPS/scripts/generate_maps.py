@@ -117,7 +117,18 @@ class NightResort(MapDef):
         h += sst(28, 50, y) * 3.5 + sst(40, 50, abs(x)) * 2.4 + sst(40, 50, -y) * 2
         return h + self.path_dip(x, y)
 
-MAPS = {m.id: m for m in (BaseCamp(), SlopeField(), IceLake(), ForestVillage(), NightResort())}
+class SnowBrawlArena(MapDef):
+    """개인전(SNOW BRAWL) 전용: 지름 60 m 원형 설원 + 높은 눈벽 링. 나무 없음, 안쪽은 거의 평탄(굴린 눈이 지형을 따라 감)."""
+    id, name = 'snow_brawl_arena', 'Snow Brawl Arena'
+    R = 30.  # 바깥 눈벽 링 반지름(안쪽 플레이 영역)
+    plaza = (0, 0, 9)
+    def height(self, x, y):
+        r = math.hypot(x, y)
+        h = .12 * fbm(x, y, .06, 21) * sst(26, 8, r)              # 안쪽: 10 cm 남짓 결만(평탄)
+        h += sst(31, 44, r) * (3.2 + 1.2 * fbm(x, y, .05, 23))     # 링 바깥: 둔덕 → 배경 설산으로 이어짐
+        return h
+
+MAPS = {m.id: m for m in (BaseCamp(), SlopeField(), IceLake(), ForestVillage(), NightResort(), SnowBrawlArena())}
 
 # ══════════════════════ terrain + backdrop meshes ══════════════════════
 def terrain(m, coll, step=1.):
@@ -437,7 +448,27 @@ def layout_night_resort(S):
     for x, y in ((-27, 33), (27, 33)): string_lights(S, (x * .6, y - 3, S.ground(x * .6, y - 3) + 4.5), (x * .2, y - 5, S.ground(x * .2, y - 5) + 4.5), .7)
     return {'pink': ((-46, -36), (-18, 4)), 'blue': ((36, 46), (-18, 4))}
 
-LAYOUTS = {'base_camp': layout_base_camp, 'slope_field': layout_slope_field, 'ice_lake': layout_ice_lake,
+def layout_snow_brawl_arena(S):
+    """나무·건물·좁은 통로 없음. 바깥 링 = 높은 눈벽(경계), 안쪽 = 낮은 눈벽·눈더미·눈사람 엄폐물(8방 대칭, 사이 3 m+ 통로).
+    스폰 8곳은 링 안쪽 r=25, 엄폐물과 2.5 m+ 떨어진 평탄한 자리(서로 19 m+ 간격, 모두 가운데를 봄)."""
+    rnd = random.Random(707); R = S.m.R
+    n = math.ceil(2 * math.pi * (R + .5) / 2.9)                 # 3.3 m 벽을 2.9 m 간격으로 → 겹쳐서 틈 없음
+    for i in range(n):
+        a = 2 * math.pi * i / n; S.put('snow_wall_high', (R + .5) * math.cos(a), (R + .5) * math.sin(a), a + math.pi / 2, name=f'ring_wall_{i:02d}')
+    for k in range(4):                                         # 안쪽 링: 낮은 벽 4개(r 10, 대각선) — 넘어갈 수 있는 엄폐
+        a = math.pi / 4 + k * math.pi / 2; S.put('snow_wall_low', 10 * math.cos(a), 10 * math.sin(a), a + math.pi / 2)
+    for k in range(4):                                         # 축 방향 r 16: 눈더미
+        a = k * math.pi / 2; S.put('snow_pile', 16 * math.cos(a), 16 * math.sin(a), rnd.random() * 6, rnd.uniform(.9, 1.1))
+    for k in range(4):                                         # 대각선 r 19: 눈사람(작은 조형물)
+        a = math.pi / 4 + k * math.pi / 2; S.put('snowman', 19 * math.cos(a), 19 * math.sin(a), a + math.pi)
+    for k in range(4):                                         # 축 방향 r 22, 옆으로 비킨 낮은 벽(스폰 앞 엄폐, 스폰과는 안 겹침)
+        a = k * math.pi / 2 + .26; S.put('snow_wall_low', 21.5 * math.cos(a), 21.5 * math.sin(a), a)
+    for k in range(6):                                         # 링 밖 장식(설산 앞 눈더미·깃발) — 충돌 없음
+        a = k * math.pi / 3 + .3; S.put('snow_pile', 36 * math.cos(a), 36 * math.sin(a), rnd.random() * 6, 1.4, decor=True)
+    for k in range(8): a = k * math.pi / 4 + math.pi / 8; S.put('flag_red', (R + 2.2) * math.cos(a), (R + 2.2) * math.sin(a), 0, decor=True)
+    return {'ffa': [(25 * math.cos(math.pi / 8 + k * math.pi / 4), 25 * math.sin(math.pi / 8 + k * math.pi / 4)) for k in range(8)]}
+
+LAYOUTS = {'snow_brawl_arena': layout_snow_brawl_arena, 'base_camp': layout_base_camp, 'slope_field': layout_slope_field, 'ice_lake': layout_ice_lake,
            'forest_village': layout_forest_village, 'night_resort': layout_night_resort}
 
 # ══════════════════════ night: baked light pools on the snow (emissive texture → works with zero real-time lights) ══════════════════════
@@ -492,6 +523,8 @@ def environment(m, S):
             'note': 'GLB contains no light objects; values match the current game (index.html) lighting.'}
 
 def spawns(S, zones):
+    if 'ffa' in zones:  # 개인전: 정해 둔 자리 그대로(평탄·엄폐물 2.5 m+ 는 검증 스크립트가 확인)
+        return {'ffa': [to_three((x, y, S.ground(x, y))) for x, y in zones['ffa']]}
     out = {}
     for team, ((x0, x1), (y0, y1)) in zones.items():
         pts = []
@@ -506,7 +539,7 @@ def spawns(S, zones):
 # ══════════════════════ renders: 4 shots per map, with real game penguins for scale ══════════════════════
 PENGUIN_GLB = os.path.join(os.path.dirname(ROOT), 'assets', 'penguin_blue.glb')
 PINK = {'jacket_blue': '#ff65a8', 'jacket_trim_blue': '#e44d8f', 'beanie_blue': '#ff6fae', 'goggle_strap_blue': '#e8579a'}
-def add_penguin(rc, loc, yaw, team):
+def add_penguin(rc, loc, yaw, team):  # team: 'blue' | 'pink' | '#rrggbb'(옷·모자·고글끈 한 색)
     if not os.path.exists(PENGUIN_GLB): return
     before = set(bpy.data.objects)
     bpy.ops.import_scene.gltf(filepath=PENGUIN_GLB)
@@ -522,14 +555,15 @@ def add_penguin(rc, loc, yaw, team):
     for o in new:
         if o.type != 'MESH': continue
         if o.name.split('.')[0] in face and o.name.split('.')[0] not in show: o.hide_render = True
-        if team == 'pink':
+        if team != 'blue':
             for i, ms in enumerate(o.material_slots):
                 base = ms.material.name.split('.')[0] if ms.material else ''
                 if base in PINK:
-                    nm = base + '_pinkR'; pm = bpy.data.materials.get(nm)
+                    hexc = PINK[base] if team == 'pink' else team
+                    nm = base + '_' + (team if team == 'pink' else team[1:]) + 'R'; pm = bpy.data.materials.get(nm)
                     if not pm:
                         pm = ms.material.copy(); pm.name = nm
-                        nd = next(n for n in pm.node_tree.nodes if n.type == 'BSDF_PRINCIPLED'); nd.inputs['Base Color'].default_value = (*srgb(PINK[base]), 1)
+                        nd = next(n for n in pm.node_tree.nodes if n.type == 'BSDF_PRINCIPLED'); nd.inputs['Base Color'].default_value = (*srgb(hexc), 1)
                     o.material_slots[i].material = pm
 
 def render_map(m, S, H):
@@ -546,13 +580,15 @@ def render_map(m, S, H):
          'slope_field': [(-4, -34, .3, 'blue'), (5, -30, -.5, 'pink'), (-8, 2, .2, 'pink'), (2, -38, 3.0, 'blue')],
          'ice_lake': [(-5, 2, .4, 'blue'), (6, -6, -.5, 'pink'), (-12, -9, .8, 'pink'), (13, 3, 2.6, 'blue')],
          'forest_village': [(-3, 1, .3, 'blue'), (4, -4, -.6, 'pink'), (-7, 6, .9, 'pink'), (8, 3, 2.4, 'blue')],
-         'night_resort': [(-3, -6, .3, 'blue'), (5, -10, -.6, 'pink'), (-7, -1, .9, 'pink'), (9, -4, 2.4, 'blue')]}[m.id]
+         'night_resort': [(-3, -6, .3, 'blue'), (5, -10, -.6, 'pink'), (-7, -1, .9, 'pink'), (9, -4, 2.4, 'blue')],
+         'snow_brawl_arena': [(6 * math.cos(k * .785), 6 * math.sin(k * .785), k * .785 + 1.57, c) for k, c in enumerate(('#FF6478', '#FFAD54', '#F4D65D', '#63D69A', '#64C8F2', '#648FFF', '#AD83EF', '#F18DCE'))]}[m.id]
     for x, y, yaw, team in P: add_penguin(rc, (x, y, g(x, y)), yaw, team)
     shots = {
         'base_camp': [((-58, -62, 46), (0, 6, 0), 32), ((-28, -13, g(-28, -13) + 1.7), (0, 4, 2), 30), ((-15, -24, 9), (0, -1, 0), 32), ((-16, 5, g(-16, 5) + 2.6), (0, 26, 3.2), 32)],
         'slope_field': [((-70, -78, 48), (0, 0, 6), 30), ((-6, -46, g(-6, -46) + 1.7), (0, 0, 6), 28), ((-18, -50, 12), (0, -30, 0), 32), ((-14, 30, g(-14, 30) + 3.2), (0, 47.5, g(0, 47.5) + 3.5), 30)],
         'ice_lake': [((-60, -66, 44), (0, 4, 0), 32), ((-36, -6, g(-36, -6) + 1.7), (0, 2, 0), 28), ((-16, -30, 10), (0, -2, 0), 32), ((-6, 8, 2.6), (-2, 31, 4.5), 30)],
         'forest_village': [((-56, -64, 50), (0, 6, 0), 32), ((-40, 0, g(-40, 0) + 1.7), (0, 0, 2), 28), ((-14, -22, 10), (0, 0, 0), 32), ((-4, 14, 2.5), (0, 31, 6), 26)],
+        'snow_brawl_arena': [((-44, -48, 40), (0, 0, 0), 30), ((-24, -4, 1.7), (0, 0, 1), 28), ((-14, -20, 9), (0, 0, 0), 32), ((0, -13, 3.2), (0, 0, 1), 32)],
         'night_resort': [((-58, -64, 40), (0, 12, 2), 30), ((-40, -10, g(-40, -10) + 1.7), (0, 0, 2), 28), ((-16, -32, 10), (0, -8, 0), 32), ((-8, 14, g(-8, 14) + 2.6), (0, 34, 4), 30)],
     }[m.id]
     for (loc, tgt, lens), nm in zip(shots, ('1_overview', '2_player_eye', '3_combat_zone', '4_landmark_closeup')):

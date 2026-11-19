@@ -1,6 +1,6 @@
 // deno test server_test.ts
-import { blocksBall, pushOut } from "./maps.js";
-import { BREAK_MS, createRoom, dev, handle, issueFrom, join, leave, pickRoom, rewindFor, round, ROUND_MS, rooms, takeReport, tick } from "./server.ts";
+import { blocksBall, BRAWL, pushOut } from "./maps.js";
+import { BREAK_MS, createRoom, dev, handle, issueFrom, join, leave, pickRoom, ranking, rewindFor, round, ROUND_MS, rooms, takeReport, tick } from "./server.ts";
 import type { P, Room } from "./server.ts";
 
 const sock = { send() {} };
@@ -611,4 +611,73 @@ Deno.test("배 슬라이딩 중 피격: 누운 판정 구(머리 위로 지나�
   room.balls.push({ id: 10, owner: a.id, team: a.team, x: 0, y: 0.5, z: 1, vx: 0, vy: 0, vz: -25, age: 0, rewind: null });
   for (let j = 0; j < 10; j++) tick(room, 5100);
   assert(b.frozenUntil > 5100 && !b.slideT, "얼면 슬라이딩 끝");
+});
+
+// ── SNOW BRAWL(개인전) ──
+const arena = () => createRoom("snow_brawl_arena");
+const roll = (p: P, now: number, hold = 0) => { handle(p, { t: "r", on: true }, now); handle(p, { t: "r", on: false }, now + hold); };
+const run = (room: Room, from: number, ms: number) => { for (let t = 0; t <= ms; t += 33) tick(room, from + t); };
+
+Deno.test("개인전: 봇 없음, 8명까지 색이 모두 다름, 9번째는 못 들어감, 나간 색은 다시 쓰고 재접속은 예전 색", () => {
+  const room = arena(); rooms.set(room.map.id, room);
+  const ps = Array.from({ length: 8 }, (_, i) => join(room, sock, "p" + i));
+  assert(![...room.players.values()].some((p) => p.bot), "봇 없음");
+  assert(new Set(ps.map((p) => p.team)).size === 8 && ps.every((p) => p.team >= 2 && p.team < 2 + BRAWL.colors.length), `색 ${ps.map((p) => p.team)}`);
+  assert(pickRoom("snow_brawl_arena") === null, "8명이면 꽉 참(팀전으로 안 보냄)");
+  assert(pickRoom("auto")?.map.mode !== "brawl", "자동은 팀전 방만");
+  const c = ps[3].team - 2; leave(ps[3]);
+  const back = join(room, sock, "p3", c);
+  assert(back.team === 2 + c, "재접속하면 예전 색");
+  leave(ps[5]); const other = join(room, sock, "x", c);
+  assert(other.team === ps[5].team, "비어 있는 색을 줌(이미 쓰는 색 요청은 무시)");
+  rooms.set(room.map.id, createRoom(room.map.id));
+});
+
+Deno.test("개인전: 스폰 8곳이 서로 다르고 장애물 밖, 모두가 적(싸다구 1점·팀 점수 없음)", () => {
+  const room = arena(), ps = Array.from({ length: 8 }, (_, i) => join(room, sock, "p" + i));
+  for (let i = 0; i < 8; i++) for (let j = i + 1; j < 8; j++) assert(Math.hypot(ps[i].x - ps[j].x, ps[i].z - ps[j].z) > 15, "스폰 간격");
+  for (const p of ps) { const [x, z] = pushOut(room.map, p.x, p.z); assert(x === p.x && z === p.z, "장애물과 안 겹침"); }
+  const [a, b] = ps; place(a, 0, 0, Math.PI); place(b, 0, -1.6);
+  handle(a, { t: "sl" }, 1000); run(room, 1000, 300);
+  assert(b.hp === 2 && a.score === BRAWL.slapPts && room.game.scores.join() === "0,0", `싸다구 hp ${b.hp} score ${a.score}`);
+});
+
+Deno.test("개인전: 던지기·모으기는 서버가 거절, 팀전은 그대로", () => {
+  const room = arena(), a = join(room, sock, "a");
+  handle(a, { t: "th", vx: 0, vy: 0, vz: -20 }, 1000); handle(a, { t: "g", on: true }, 1000);
+  assert(room.balls.length === 0 && a.ammo === 10 && !a.gather, "개인전 던지기·모으기 거절");
+  const t = createRoom("slope"), b = join(t, sock, "b");
+  handle(b, { t: "th", vx: 0, vy: 0, vz: -20 }, 1000);
+  assert(t.balls.length === 1, "팀전 던지기는 됨");
+});
+
+Deno.test("개인전 굴린 눈: 앞으로 굴러가 맞히면 2점·체력 -1·한 명만, 쿨다운 2초, 13m 넘으면·벽에 닿으면 부서짐, 점프로 넘으면 안 맞음", () => {
+  const room = flat("snow_brawl_arena"), a = join(room, sock, "a"), b = join(room, sock, "b"), c = join(room, sock, "c");
+  place(a, 0, 0, Math.PI); place(b, 0, -6); place(c, 0, -8); // a 는 -z 를 봄, b 가 앞, c 는 b 뒤
+  roll(a, 1000);
+  assert(evs(room, "rl").length === 1 && room.rolls.length === 1, "굴려 보냄");
+  run(room, 1000, 1500);
+  assert(b.hp === 2 && c.hp === 3 && a.score === BRAWL.rollPts && evs(room, "rlh").length === 1, `한 명만 b ${b.hp} c ${c.hp} score ${a.score}`);
+  roll(a, 2500); assert(evs(room, "rl").length === 1, "2초 안에는 다시 못 굴림");
+  place(b, 30, 30); place(c, 30, 31);
+  roll(a, 3100); run(room, 3100, 2000);
+  assert(evs(room, "rlx").length === 1 && room.rolls.length === 0, "13m 끝에서 부서짐");
+  // 점프로 넘기: b 가 공중 1.2m(눈 지름 0.5m 위)
+  place(b, 0, -5); b.y = 1.2; b.hp = 3; roll(a, 6000); run(room, 6000, 900);
+  assert(b.hp === 3 && evs(room, "rlh").length === 1, `눈 위로 뛰면 안 맞음 hp ${b.hp}`);
+  // 벽: 실제 경기장 링 바깥 벽 쪽으로
+  const r2 = arena(), w = join(r2, sock, "w"); place(w, 0, 27, 0); roll(w, 1000); run(r2, 1000, 1000);
+  assert(evs(r2, "rlx").length === 1 && r2.rolls.length === 0 && Math.hypot(...(evs(r2, "rlx")[0].slice(2, 4) as [number, number])) < 30.5, "바깥 눈벽에 부딪혀 부서짐");
+});
+
+Deno.test("개인전 판 끝: 개인 순위(같은 점수는 같은 순위), 새 판은 모두 다른 스폰", () => {
+  const room = arena(), ps = Array.from({ length: 4 }, (_, i) => join(room, sock, "p" + i));
+  ps[0].score = 5; ps[1].score = 7; ps[2].score = 7; ps[3].score = 1;
+  round(room, 1000); room.game.roundEnd = 2000; round(room, 2000);
+  const ev = evs(room, "ffa")[0], rk = ev[1] as number[][];
+  assert(evs(room, "over").length === 0 && rk.map((r) => r[1]).join() === "1,1,3,4" && rk[0][2] === 7, `순위 ${JSON.stringify(rk)}`);
+  assert(JSON.stringify(ranking(room)) === JSON.stringify(rk), "ranking 함수와 같음");
+  round(room, 2000 + BREAK_MS);
+  assert(ps.every((p) => p.score === 0), "새 판 점수 0");
+  for (let i = 0; i < 4; i++) for (let j = i + 1; j < 4; j++) assert(Math.hypot(ps[i].x - ps[j].x, ps[i].z - ps[j].z) > 15, "새 판 스폰 간격");
 });

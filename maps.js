@@ -30,9 +30,28 @@ function gridHeight(b64, n) {
 for (const g of GLB_MAPS) {
   const ice = g.ice ? (x, z) => ((x - g.ice.x) / g.ice.rx) ** 2 + ((z - g.ice.z) / g.ice.rz) ** 2 < 1 : null;
   MAPS.push({ id: g.id, name: g.name, emoji: g.emoji, glb: g.glb, h: gridHeight(g.heights, g.n), obstacles: g.obstacles,
-    spawns: g.spawns, spawnX: [36, 44], sky: g.sky, fog: g.fog, env: g.env, onIce: ice });
+    spawns: g.spawns, spawnX: [36, 44], sky: g.sky, fog: g.fog, env: g.env, onIce: ice, mode: g.mode ?? 'team' });
 }
 export const mapById = (id) => MAPS.find((m) => m.id === id) ?? MAPS[0];
+
+// ── SNOW BRAWL(개인전): 이 모드 맵의 방은 팀이 없고 사람마다 색이 하나(team = 2 + 색 번호). 눈덩이 던지기·모으기 없음, 공격은 싸다구와 굴린 눈만.
+// 굴린 눈: R 꾹(기존 굴리기로 눈을 키움) → 떼면 앞으로 굴러감. 초속 9m·최대 13m, 땅 높이를 따라가고 장애물·경계에 부딪히면 부서짐.
+// 맞히면 2점(싸다구 1점), 체력 -1. 한 덩이는 한 명만. 다음 굴리기는 떼고 2초 뒤부터. 점수가 같으면 공동 순위(팀전의 무승부와 같은 기준)
+export const BRAWL = { max: 8, colors: ['#FF6478', '#FFAD54', '#F4D65D', '#63D69A', '#64C8F2', '#648FFF', '#AD83EF', '#F18DCE'],
+  names: ['빨강', '주황', '노랑', '초록', '하늘', '파랑', '보라', '분홍'], rollCd: 2000, rollV: 9, rollRange: 13, rollPts: 2, slapPts: 1 };
+export const isBrawl = (m) => m?.mode === 'brawl';
+// 굴린 눈 한 걸음(서버·화면 공통). b = { x, z, dx, dz, r, d(지금까지 간 거리) }. 'wall' | 'far' | null
+export function rollStep(m, b, dt) {
+  const s = BRAWL.rollV * dt, nx = b.x + b.dx * s, nz = b.z + b.dz * s;
+  b.d += s;
+  if (Math.abs(nx) > 49 || Math.abs(nz) > 49) return 'wall';
+  const [px, pz] = pushOut(m, nx, nz, b.r * 0.9, m.h(nx, nz)); // 땅에 붙어 구르므로 낮은 눈벽도 막힘
+  if (Math.abs(px - nx) > 1e-6 || Math.abs(pz - nz) > 1e-6) return 'wall';
+  b.x = nx; b.z = nz;
+  return b.d >= BRAWL.rollRange ? 'far' : null;
+}
+// 굴린 눈이 펭귄(발 높이 py)에 닿나: 바닥 원끼리 겹치고, 점프로 눈 위를 넘지 않았으면
+export const rollHits = (m, b, px, py, pz) => Math.hypot(px - b.x, pz - b.z) < b.r + BODY_R && py < m.h(b.x, b.z) + 2 * b.r - 0.1;
 
 // 고정 시드 난수: 서버와 화면이 같은 순서로 부르면 같은 자리가 나온다
 const rng = (seed) => () => (seed = (seed * 16807) % 2147483647) / 2147483647;

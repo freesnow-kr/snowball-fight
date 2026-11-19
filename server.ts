@@ -1,7 +1,8 @@
 // 실행: deno run --allow-net --allow-read --allow-env server.ts  →  http://localhost:8000
 // 맵마다 방이 하나씩 있고(maps.js), 방마다 플레이어·눈덩이·눈사람·점수·판이 따로 돈다.
-import { blocksBall, GRAVITY, hitsPenguin, JUMP_V, MAPS, mapById, pushOut, rampAt, rampVy, SLAP, SLIDE, slideNose, slideSpeed, sweep, wallBetween } from "./maps.js";
+import { blocksBall, BRAWL, GRAVITY, hitsPenguin, isBrawl, JUMP_V, MAPS, mapById, pushOut, rampAt, rampVy, rollHits, rollStep, SLAP, SLIDE, slideNose, slideSpeed, sweep, wallBetween } from "./maps.js";
 
+const BODY_R_SRV = 0.4; // maps.js BODY_R
 const ARENA = 50, MAX_HUMANS = 30, MAX_AMMO = 10, HP = 3, G = -15, DT = 1 / 30, MAX_PILES = 40;
 const MOVE_SPEED = 8, MOVE_BURST = 3; // 위치 보고 검사: 초당 8m(달리기 7.2+여유)씩 쌓이는 이동 한도, 최대 3m까지 모아 둠(넉백·전송 지연)
 // 사람이 던진 공은 '던진 사람 화면에 상대가 보였던 시점'의 위치들(0.033초 간격 기록)로 판정한다 → 화면에서 맞으면 맞고, 빗나가면 빗나감.
@@ -21,9 +22,9 @@ const BOT_NAMES = ["눈송이", "고드름", "함박", "싸락", "서리", "눈�
 type Sock = { send(s: string): void };
 const NOSOCK: Sock = { send() {} };
 type Obstacle = { kind: string; x: number; y: number; z: number; s: number; ball: number; body: number; top: number; hw?: number; hd?: number; rot?: number; hop?: number };
-type MapDef = { id: string; name: string; emoji: string; spawnX: number[]; spawns?: number[][][]; h: (x: number, z: number) => number; obstacles: Obstacle[] };
+type MapDef = { id: string; name: string; emoji: string; spawnX: number[]; spawns?: number[][][]; h: (x: number, z: number) => number; obstacles: Obstacle[]; mode?: string };
 export type Room = {
-  map: MapDef; players: Map<number, P>; balls: Ball[]; piles: Pile[]; events: unknown[];
+  map: MapDef; players: Map<number, P>; balls: Ball[]; piles: Pile[]; events: unknown[]; rolls: Roll[]; // rolls: 개인전 굴린 눈
   game: { scores: number[]; roundEnd: number; breakUntil: number };
 };
 export type P = {
@@ -42,13 +43,15 @@ export type P = {
   slapAt: number; slapYaw: number; slapPend: boolean; hitAt: number; stunUntil: number;
   // 배 슬라이딩: 시작 시각(0 = 안 함)·서버가 계산한 속도·마지막 시작 시각(쿨다운)
   slideT: number; slideV: number; slideAt: number;
+  rollAt: number; // 개인전: 마지막으로 굴린 눈을 보낸 시각(쿨다운)
 };
+type Roll = { id: number; owner: number; x: number; z: number; dx: number; dz: number; r: number; d: number };
 type Ball = { id: number; owner: number; team: number; x: number; y: number; z: number; vx: number; vy: number; vz: number; age: number; rewind: [number, number] | null };
 export type Pile = { id: number; x: number; z: number; parts: number[] };
 
-let nextId = 1, ballId = 1, pileId = 1;
+let nextId = 1, ballId = 1, pileId = 1, rollId = 1;
 export function createRoom(mapId: string): Room {
-  return { map: mapById(mapId) as MapDef, players: new Map(), balls: [], piles: [], events: [], game: { scores: [0, 0], roundEnd: 0, breakUntil: 0 } };
+  return { map: mapById(mapId) as MapDef, players: new Map(), balls: [], piles: [], events: [], rolls: [], game: { scores: [0, 0], roundEnd: 0, breakUntil: 0 } };
 }
 export const rooms = new Map(MAPS.map((m) => [m.id, createRoom(m.id)]));
 
@@ -60,13 +63,16 @@ const pick = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
 const meta = (p: P) => [p.id, p.name, p.team, p.bot ? 1 : 0];
 const count = (room: Room, team: number, bot?: boolean) =>
   [...room.players.values()].filter((p) => p.team === team && (bot === undefined || p.bot === bot)).length;
-export const humanCount = (room: Room) => count(room, 0, false) + count(room, 1, false);
+export const humanCount = (room: Room) => [...room.players.values()].filter((p) => !p.bot).length;
+const brawl = (room: Room) => isBrawl(room.map);
+const cap = (room: Room) => brawl(room) ? BRAWL.max : MAX_HUMANS; // 개인전은 색 8개 = 8명
 
 // 원하는 맵 방에 자리가 있으면 그 방. 아니면(자동 포함) 사람이 가장 많은 방(같이 놀게), 다 비었으면 아무 방. 다 차면 null
 export function pickRoom(want: unknown): Room | null {
   const asked = rooms.get(String(want));
-  if (asked && humanCount(asked) < MAX_HUMANS) return asked;
-  const open = [...rooms.values()].filter((r) => humanCount(r) < MAX_HUMANS);
+  if (asked && humanCount(asked) < cap(asked)) return asked;
+  if (asked && brawl(asked)) return null; // 개인전을 골랐는데 꽉 참 → 팀전으로 보내지 않음
+  const open = [...rooms.values()].filter((r) => !brawl(r) && humanCount(r) < MAX_HUMANS); // 자동은 팀전 방만
   if (!open.length) return null;
   const most = Math.max(...open.map(humanCount));
   return pick(open.filter((r) => humanCount(r) === most));
@@ -75,7 +81,14 @@ export function pickRoom(want: unknown): Room | null {
 // 팀 0(핑크)은 서쪽, 팀 1(블루)은 동쪽에서 서로 마주 보고 시작
 function spawnAt(p: P) {
   const side = p.team === 0 ? -1 : 1, [a, b] = p.room.map.spawnX, sp = p.room.map.spawns?.[p.team];
-  if (sp?.length) { // Blender 맵: 메타데이터의 안전한 스폰 자리(장애물에서 2.5m+, 평탄) 중 하나 ±1m, 맵 가운데를 바라봄
+  if (brawl(p.room)) { // 개인전: 스폰 8곳 중 다른 펭귄과 가장 먼 곳(±0.5m), 가운데를 바라봄
+    const others = [...p.room.players.values()].filter((q) => q !== p);
+    const far = (s: number[]) => Math.min(99, ...others.map((q) => Math.hypot(q.x - s[0], q.z - s[1])));
+    const [sx, sz] = p.room.map.spawns![0].reduce((best, s) => far(s) > far(best) ? s : best);
+    [p.x, p.z] = pushOut(p.room.map, sx + Math.random() - 0.5, sz + Math.random() - 0.5);
+    p.y = p.room.map.h(p.x, p.z);
+    p.yaw = Math.atan2(-p.x, -p.z);
+  } else if (sp?.length) { // Blender 맵: 메타데이터의 안전한 스폰 자리(장애물에서 2.5m+, 평탄) 중 하나 ±1m, 맵 가운데를 바라봄
     const [sx, sz] = pick(sp);
     [p.x, p.z] = pushOut(p.room.map, clampA(sx + Math.random() * 2 - 1), clampA(sz + Math.random() * 2 - 1));
     p.y = p.room.map.h(p.x, p.z);
@@ -98,7 +111,7 @@ function addPlayer(room: Room, sock: Sock, name: string, team: number, bot: bool
     id: nextId++, name, team, bot, room, x: 0, y: 0, z: 0, yaw: 0, hp: HP, ammo: MAX_AMMO, score: 0, freezes: 0,
     frozenUntil: 0, gather: false, gatherT: 0, lastThrow: 0, roll: 0, sock, hist: [], rtt: 100, pingAt: 0, moveBudget: MOVE_BURST, moveT: 0, ground: true, airT: 0, airY: 0, airVy: 0, hspd: 0, onRamp: false,
     strafe: 1, strafeUntil: 0, throwAt: Date.now() + 1000 + Math.random() * 2000,
-    slapAt: -1e9, slapYaw: 0, slapPend: false, hitAt: -1e9, stunUntil: 0, slideT: 0, slideV: 0, slideAt: -1e9,
+    slapAt: -1e9, slapYaw: 0, slapPend: false, hitAt: -1e9, stunUntil: 0, slideT: 0, slideV: 0, slideAt: -1e9, rollAt: -1e9,
   };
   spawnAt(p);
   room.players.set(p.id, p);
@@ -112,6 +125,7 @@ function remove(p: P) {
 }
 
 export function fillBots(room: Room) {
+  if (brawl(room)) return; // ponytail: 개인전 봇 없음(봇은 던지기만 함). 혼자면 연습장, 개인전 봇이 필요하면 싸다구·굴리기 봇 추가
   for (const t of [0, 1]) {
     while (count(room, t) < TEAM_SIZE) addPlayer(room, NOSOCK, `🤖 ${pick(BOT_NAMES)}`, t, true);
     while (count(room, t) > TEAM_SIZE) {
@@ -122,10 +136,16 @@ export function fillBots(room: Room) {
   }
 }
 
-// 사람 수가 적은 팀으로. 같으면 전체 인원이 적은 팀으로
-export function join(room: Room, sock: Sock, name: unknown): P {
+// 사람 수가 적은 팀으로. 같으면 전체 인원이 적은 팀으로.
+// 개인전: 남은 색 중 하나(team = 2 + 색 번호). 다시 들어오며 예전 색(color)을 달라고 하면 비어 있을 때 그 색. 나가면 그 색은 다시 빔
+export function join(room: Room, sock: Sock, name: unknown, color?: unknown): P {
   const h0 = count(room, 0, false), h1 = count(room, 1, false);
-  const team = h0 !== h1 ? (h0 < h1 ? 0 : 1) : count(room, 0) <= count(room, 1) ? 0 : 1;
+  let team = h0 !== h1 ? (h0 < h1 ? 0 : 1) : count(room, 0) <= count(room, 1) ? 0 : 1;
+  if (brawl(room)) {
+    const used = new Set([...room.players.values()].map((p) => p.team - 2));
+    const free = BRAWL.colors.map((_, i) => i).filter((i) => !used.has(i));
+    team = 2 + (free.includes(Number(color)) ? Number(color) : free[0]); // pickRoom 이 8명 미만만 보내므로 free 는 비지 않음
+  }
   const p = addPlayer(room, sock, String(name ?? "").trim().slice(0, 12) || "익명", team, false);
   fillBots(room);
   sock.send(JSON.stringify({ t: "welcome", id: p.id, map: room.map.id, players: [...room.players.values()].map(meta), piles: room.piles }));
@@ -149,6 +169,16 @@ function place(p: P) {
     if (piles.length > MAX_PILES) events.push(["pilex", piles.shift()!.id]);
   }
   events.push(["pile", pile]);
+}
+
+// 개인전: 키운 눈을 바라보는 쪽으로 굴려 보냄(몸 앞 r+0.5m 에서 출발). 출발 자리가 장애물 안이면 그냥 부서짐
+function launchRoll(p: P, now: number) {
+  const { room } = p, dx = Math.sin(p.yaw), dz = Math.cos(p.yaw), r = r2(p.roll), off = BODY_R_SRV + r + 0.1;
+  p.rollAt = now;
+  const b: Roll = { id: rollId++, owner: p.id, x: p.x + dx * off, z: p.z + dz * off, dx, dz, r, d: 0 };
+  room.events.push(["rl", b.id, p.id, r2(b.x), r2(b.z), r2(dx), r2(dz), r]);
+  if (rollStep(room.map, b, 0) === "wall") return room.events.push(["rlx", b.id, r2(b.x), r2(b.z)]);
+  room.rolls.push(b);
 }
 
 // 보고된 발 높이 y 를 서버의 중력 계산으로 검증한 값. 땅 밑으로는 못 가고, 공중 높이는 탄도 곡선 아래로만
@@ -239,12 +269,14 @@ export function handle(p: P, m: any, now = Date.now()) {
       return;
     }
     case "g":
+      if (brawl(room)) return; // 개인전: 눈을 모을 일이 없음(던지기 없음)
       p.gather = !!m.on && !p.slideT;
       p.gatherT = now;
       return;
     case "th": {
       let vx = num(m.vx, -40, 40), vy = num(m.vy, -40, 40), vz = num(m.vz, -40, 40);
       const seq = num(m.s, 0, 65535) ?? 0; // 던진 사람 화면의 예측 눈덩이와 짝 맞추기용
+      if (brawl(room)) return; // 개인전: 던지기 금지(화면 버튼을 숨긴 것과 별개로 서버가 거절)
       if (vx === null || vy === null || vz === null || frozen || p.roll || p.slideT || p.ammo < 1 || now - p.lastThrow < 250 || now < room.game.breakUntil) return;
       const s = Math.hypot(vx, vy, vz), k = s > 28 ? 28 / s : 1;
       vx *= k, vy *= k, vz *= k;
@@ -256,8 +288,8 @@ export function handle(p: P, m: any, now = Date.now()) {
       return;
     }
     case "r":
-      if (m.on && !frozen && !p.roll && !p.slideT) p.roll = 0.25;
-      else if (!m.on && p.roll) { place(p); p.roll = 0; }
+      if (m.on && !frozen && !p.roll && !p.slideT && !(brawl(room) && (now - p.rollAt < BRAWL.rollCd - 100 || now < room.game.breakUntil))) p.roll = 0.25;
+      else if (!m.on && p.roll) { if (brawl(room)) launchRoll(p, now); else place(p); p.roll = 0; }
       return;
     case "sl": { // 싸다구: 누른 것만 받음(대상·명중은 서버가 0.25초 뒤 임팩트 순간에 정함). 쿨다운은 지연 흔들림 0.1초 봐 줌
       if (frozen || p.slideT || p.roll || now < p.stunUntil || now - p.slapAt < SLAP.cd - 100 || now < room.game.breakUntil) return;
@@ -275,7 +307,7 @@ export function handle(p: P, m: any, now = Date.now()) {
     case "dev": { // 개발용: 판을 바로 끝냄. win = "me"(내 팀 승) | "them"(상대 승) | "draw"
       if (!dev.on || room.game.breakUntil) return;
       const w = m.win === "me" ? p.team : m.win === "them" ? 1 - p.team : -1;
-      room.game.scores = w < 0 ? [1, 1] : w === 0 ? [5, 0] : [0, 5];
+      if (!brawl(room)) room.game.scores = w < 0 ? [1, 1] : w === 0 ? [5, 0] : [0, 5];
       room.game.roundEnd = now;
       return;
     }
@@ -289,8 +321,9 @@ export function handle(p: P, m: any, now = Date.now()) {
 
 // 맞음(눈덩이·싸다구 공통): 맞힌 사람·팀 점수 +1, 체력 -1, 3번이면 3초 얼음(하던 슬라이딩·모으기·굴리기 끝)
 // 같은 팀을 때린 싸다구는 점수 없이 체력·경직·얼음만(팀원을 때려 점수를 쌓지 못하게)
-function damage(room: Room, p: P, by: P | undefined, team: number, now: number) {
-  if (team !== p.team) {
+function damage(room: Room, p: P, by: P | undefined, team: number, now: number, pts = 1) {
+  if (brawl(room)) { if (by && by !== p && now >= room.game.breakUntil) by.score += pts; } // 개인전: 개인 점수만
+  else if (team !== p.team) {
     if (by) by.score++;
     if (now >= room.game.breakUntil) room.game.scores[team]++;
   }
@@ -324,7 +357,7 @@ export function resolveSlap(room: Room, a: P, now: number) {
   room.events.push(["slap", a.id, best.id, r2((dx / d) * SLAP.push), r2((dz / d) * SLAP.push)]);
   best.stunUntil = now + SLAP.stun;
   best.slideT = 0; // 경직: 미끄러지던 것도 멈춤
-  damage(room, best, a, a.team, now);
+  damage(room, best, a, a.team, now, BRAWL.slapPts);
 }
 
 export function tick(room: Room, now = Date.now()) {
@@ -338,6 +371,20 @@ export function tick(room: Room, now = Date.now()) {
     while (p.hist.length > 1 && p.hist[0][0] < now - REWIND_MAX - 50) p.hist.shift();
     if (!p.bot && now - p.pingAt > 2000) { p.pingAt = now; p.sock.send(JSON.stringify({ t: "ping", ts: now })); }
   }
+  // 개인전 굴린 눈: 땅을 따라 굴러가다 처음 닿은 펭귄(던진 사람·얼어 있는 사람 빼고)을 맞히고 부서짐. 장애물·13m 끝이면 부서짐
+  room.rolls = room.rolls.filter((b) => {
+    const end = rollStep(room.map, b, DT);
+    for (const p of players.values()) {
+      if (p.id === b.owner || p.frozenUntil > now || !rollHits(room.map, b, p.x, p.y, p.z)) continue;
+      const k = 5;
+      events.push(["rlh", b.id, p.id, r2(b.x), r2(b.z), r2(b.dx * k), r2(b.dz * k)]);
+      p.stunUntil = now + SLAP.stun; p.slideT = 0;
+      damage(room, p, players.get(b.owner), -1, now, BRAWL.rollPts);
+      return false;
+    }
+    if (end) { events.push(["rlx", b.id, r2(b.x), r2(b.z)]); return false; }
+    return true;
+  });
   room.balls = room.balls.filter((b) => {
     const ax = b.x, ay = b.y, az = b.z;
     b.vy += G * DT; b.x += b.vx * DT; b.y += b.vy * DT; b.z += b.vz * DT; b.age += DT;
@@ -383,11 +430,19 @@ export function round(room: Room, now = Date.now()) {
     }
     room.events.push(["round"]);
   } else if (!game.breakUntil && now >= game.roundEnd) {
-    const [a, b] = game.scores;
-    room.events.push(["over", a === b ? -1 : a > b ? 0 : 1, a, b]);
+    if (brawl(room)) room.events.push(["ffa", ranking(room)]);
+    else { const [a, b] = game.scores; room.events.push(["over", a === b ? -1 : a > b ? 0 : 1, a, b]); }
     game.breakUntil = now + BREAK_MS;
-    for (const p of room.players.values()) Object.assign(p, { slideT: 0, slapPend: false }); // 판이 끝나면 하던 슬라이딩·싸다구 모두 멈춤
+    for (const p of room.players.values()) Object.assign(p, { slideT: 0, slapPend: false, roll: 0 }); // 판이 끝나면 하던 슬라이딩·싸다구·굴리기 모두 멈춤
+    for (const b of room.rolls) room.events.push(["rlx", b.id, r2(b.x), r2(b.z)]);
+    room.rolls = [];
   }
+}
+
+// 개인전 순위: 점수 높은 순, 같은 점수는 같은 순위(1위가 여럿이면 공동 우승 — 팀전 동점 = 무승부와 같은 기준). [id, 순위, 점수, 얼은 횟수]
+export function ranking(room: Room) {
+  const ps = [...room.players.values()].sort((a, b) => b.score - a.score);
+  return ps.map((p) => [p.id, 1 + ps.filter((q) => q.score > p.score).length, p.score, p.freezes]);
 }
 
 // 눈덩이가 목표 지점에 떨어지는 속도 (index.html 의 launch 와 같은 식)
@@ -560,7 +615,7 @@ if (import.meta.main) {
       if (m?.t !== "hello") return;
       const room = pickRoom(m.map);
       if (!room) { socket.send(JSON.stringify({ t: "full" })); return socket.close(); }
-      p = join(room, socket, m.name);
+      p = join(room, socket, m.name, m.color); // color: 개인전에서 예전 색을 다시 달라는 요청(비어 있을 때만)
     };
     ws.onclose = () => { if (p) leave(p); };
     return response;

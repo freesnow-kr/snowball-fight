@@ -1,0 +1,91 @@
+{
+ "id": "snow_brawl_arena",
+ "name": "Snow Brawl Arena",
+ "mode": "snow_brawl",
+ "max_players": 8,
+ "size_m": [
+  60,
+  60
+ ],
+ "play_area": {
+  "shape": "circle",
+  "center": [
+   0,
+   0
+  ],
+  "radius": 30.0
+ },
+ "world_bounds": {
+  "x": [
+   -50,
+   50
+  ],
+  "z": [
+   -50,
+   50
+  ],
+  "note": "terrain mesh is 100×100 m; outside the ring is scenery (berm + backdrop hills)"
+ },
+ "coordinates": "three.js / glTF: +Y up, play area x,z ∈ [-50, 50] (Blender x, -y). GLB node positions are already in this space.",
+ "units": "meters (penguin 2 m tall)",
+ "origin": [
+  0,
+  0,
+  0
+ ],
+ "up": "+Y",
+ "terrain": {
+  "object": "terrain",
+  "grid_step": 1.0,
+  "height_range": [
+   -0.07,
+   4.0
+  ],
+  "file": "terrain_collision.json"
+ },
+ "environment": {
+  "preset": "day",
+  "background_top": "#7fb8ea",
+  "background_horizon": "#f2f8ff",
+  "fog": {
+   "color": "#d6ecf8",
+   "near": 45,
+   "far": 140
+  },
+  "hemisphere": {
+   "sky": "#ffffff",
+   "ground": "#8aa7c7",
+   "intensity": 1.3
+  },
+  "sun": {
+   "direction": [
+    0.55,
+    0.7,
+    0.45
+   ],
+   "color": "#fff4e0",
+   "intensity": 1.6,
+   "castShadow": true
+  },
+  "toneMapping": "None",
+  "exposure": 1.0,
+  "emissive_in_glb": [
+   "window",
+   "bulb",
+   "lamp"
+  ],
+  "lights": [],
+  "note": "GLB contains no light objects; values match the current game (index.html) lighting."
+ },
+ "trees": 0,
+ "triangles": 285246,
+ "files": [
+  "snow_brawl_arena.blend",
+  "snow_brawl_arena.glb",
+  "terrain_collision.json",
+  "colliders.json",
+  "spawn_points.json",
+  "map_config.json",
+  "preview.png"
+ ]
+}
