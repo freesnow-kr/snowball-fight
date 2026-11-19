@@ -4,3 +4,10 @@
 *.png
 README.md
 !favicon.png
+# Blender 맵 원본·백업·개별 소품은 서버에 필요 없음(게임은 glb/maps 만 씀). 렌더 PNG 는 위 *.png 로 이미 제외
+SLOPE_SNOWFIGHT_MAPS/blend
+SLOPE_SNOWFIGHT_MAPS/_backup_v1
+SLOPE_SNOWFIGHT_MAPS/glb/props
+blender
+SLOPE_SNOWFIGHT_MAPS/_backup_v2
+SLOPE_SNOWFIGHT_MAPS/glb/maps_raw

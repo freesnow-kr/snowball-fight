@@ -8,7 +8,8 @@ export function initDebug(api) {
   const { THREE, scene, renderer, ents, balls, send, puff } = api;
   const st = { show: true, maxChars: 0, ballLoad: false, partLoad: false, frames: [], gpu: [], measuring: 0, stats: { pred: 0, both: 0, serverOnly: 0, predOnly: 0 }, all: { pred: 0, both: 0, serverOnly: 0, predOnly: 0 } };
   const wire = (color) => new THREE.MeshBasicMaterial({ color, wireframe: true, transparent: true, opacity: 0.55, depthTest: false });
-  const hitM = wire('#ff3b30'), ballM = wire('#ffcc00');
+  const hitM = wire('#ff3b30'), ballM = wire('#ffcc00'), bodyColM = wire('#00e676'), ballColM = wire('#ff9100');
+  const colGroup = new THREE.Group(); colGroup.renderOrder = 10; scene.add(colGroup); // 장애물 충돌 영역(서버와 같은 maps.js 데이터)
   const group = new THREE.Group(); group.renderOrder = 10; scene.add(group);
   const helpers = new Map(); // ent → { spheres, box }
   const trails = new Map(); // ball id → { line, pts, sphere, dead }
@@ -29,10 +30,11 @@ export function initDebug(api) {
     btn('판 끝: 우리 승', () => send({ t: 'dev', win: 'me' })), btn('상대 승', () => send({ t: 'dev', win: 'them' })), btn('무승부', () => send({ t: 'dev', win: 'draw' })),
     btn('내 승리 동작', () => { const e = api.getMe(); if (e) e.victoryUntil = performance.now() + 5500; }));
   row(document.createTextNode('부하'),
-    ...[1, 4, 0].map((n) => btn(n ? `캐릭터 ${n}` : '캐릭터 전부', () => { st.maxChars = n; })),
+    ...[-1, 1, 4, 0].map((n) => btn(n < 0 ? '맵만' : n ? `캐릭터 ${n}` : '캐릭터 전부', () => { st.maxChars = n; })),
     btn('눈덩이 50개 유지', (b) => { st.ballLoad = !st.ballLoad; b.style.background = st.ballLoad ? '#ffd166' : ''; }),
     btn('파티클 폭탄', (b) => { st.partLoad = !st.partLoad; b.style.background = st.partLoad ? '#ffd166' : ''; }),
-    btn('5초 측정', () => measure(5000)));
+    btn('5초 측정', () => measure(5000)),
+    btn('장애물 충돌 끄기', (b) => { colGroup.visible = !colGroup.visible; b.textContent = colGroup.visible ? '장애물 충돌 끄기' : '장애물 충돌 켜기'; }));
   rows.append(out);
   document.body.append(panel);
   if (innerWidth < 700) fold.click(); // 좁은 화면(폰)에선 접어 둠: 입장·조작 버튼을 가리지 않게
@@ -48,6 +50,7 @@ export function initDebug(api) {
   for (const e of ents.values()) onEnt(e);
   const allowed = () => { // 캐릭터 수 제한: 나 + 앞에서부터 n-1 명
     if (!st.maxChars) return null;
+    if (st.maxChars < 0) return new Set(); // 맵만 (캐릭터 전부 숨김)
     const me = api.getMe(), list = [me, ...[...ents.values()].filter((e) => e !== me)].filter(Boolean);
     return new Set(list.slice(0, st.maxChars));
   };
@@ -93,7 +96,7 @@ export function initDebug(api) {
     allow = allowed();
     if (st.ballLoad) { // 눈덩이 50개 유지 (화면 전용, 서버로 안 감)
       const me = api.getMe(); let n = 0; for (const k of balls.keys()) if (String(k).startsWith('dbg')) n++;
-      for (; me && n < 50; n++) balls.set('dbg' + bseq++, { mesh: api.add(scene, api.ballGeo, api.M.white), x: me.x + (Math.random() - 0.5) * 10, y: me.y + 2 + Math.random() * 2, z: me.z + (Math.random() - 0.5) * 10, vx: (Math.random() - 0.5) * 16, vy: 4 + Math.random() * 6, vz: (Math.random() - 0.5) * 16, age: 0 });
+      for (; me && n < 50; n++) balls.set('dbg' + bseq++, { mesh: api.add(scene, api.ballGeo, api.ballM ?? api.M.white), x: me.x + (Math.random() - 0.5) * 10, y: me.y + 2 + Math.random() * 2, z: me.z + (Math.random() - 0.5) * 10, vx: (Math.random() - 0.5) * 16, vy: 4 + Math.random() * 6, vz: (Math.random() - 0.5) * 16, age: 0 });
     }
     if (st.partLoad && Math.random() < 0.5) { const me = api.getMe(); if (me) puff(me.x + (Math.random() - 0.5) * 8, me.y + 1, me.z + (Math.random() - 0.5) * 8, 20); }
   }
@@ -107,7 +110,7 @@ export function initDebug(api) {
     if (st.gpu.length > 2000) st.gpu.splice(0, 1000);
     // 경계 상자는 20프레임마다(스킨 메시 정점 계산이 무거움), 사라진 눈덩이 궤적은 2초 뒤 지움, 표시는 3초
     for (const [e, h] of helpers) {
-      if (!e.c.g.parent) { h.box.removeFromParent(); helpers.delete(e); continue; } // 나간 캐릭터
+      if (!e.c.g.parent) { h.box.removeFromParent(); h.box.geometry.dispose(); h.spheres.forEach((m) => m.geometry.dispose()); helpers.delete(e); continue; } // 나간 캐릭터: 표시용 지오메트리도 해제
       h.box.visible = st.show && !!e.c.peng && e.c.g.visible;
       if (h.box.visible && h.n++ % 20 === 0) h.box.box.setFromObject(e.c.peng.root, true);
     }
@@ -115,6 +118,18 @@ export function initDebug(api) {
     for (let i = marks.length - 1; i >= 0; i--) if (now > marks[i][1]) { marks[i][0].geometry.dispose(); group.remove(marks[i][0]); marks.splice(i, 1); }
     for (const [id, [t, mine]] of pending) if (now - t > 1500) { pending.delete(id); bump(mine, 'predOnly'); } // 화면에선 맞았는데 서버는 빗나감
     if (now - (st.drawn ?? 0) > 250) { st.drawn = now; draw(); }
+  }
+  // ── 장애물 충돌 영역: 초록 = 몸을 막는 범위(body / 회전 상자), 주황 = 눈덩이를 막는 범위(ball, 나무는 가지까지)
+  function onMap(m) {
+    for (const c of [...colGroup.children]) { c.geometry.dispose(); colGroup.remove(c); }
+    const put = (geo, mat, o, rot = 0) => { const x = new THREE.Mesh(geo, mat); x.position.set(o.x, o.y + o.top / 2, o.z); x.rotation.y = rot; x.renderOrder = 10; colGroup.add(x); };
+    for (const o of m.obstacles) {
+      if (o.hw !== undefined) put(new THREE.BoxGeometry(o.hw * 2, o.top, o.hd * 2), bodyColM, o, o.rot);
+      else {
+        put(new THREE.CylinderGeometry(o.body, o.body, o.top, 16, 1, true), bodyColM, o);
+        if (o.ball > o.body + 0.05) put(new THREE.CylinderGeometry(o.ball, o.ball, o.top, 16, 1, true), ballColM, o);
+      }
+    }
   }
   function setShow(v) { st.show = v; group.visible = v; for (const h of helpers.values()) h.spheres.forEach((m) => { m.visible = v; }); }
   const pct = (a, p) => { const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(s.length * p))] ?? 0; };
@@ -140,6 +155,6 @@ export function initDebug(api) {
       + `지금  ${live.fps}fps · JS ${live.cpuMs}ms · GPU ${live.gpuMs ?? '측정불가'}ms · draw ${live.calls} · 삼각형 ${live.tris} · 지오 ${live.geos} · 텍스처 ${live.texs} · 힙 ${live.heapMB ?? '?'}MB · 캐릭터 ${live.chars} · 눈덩이 ${live.balls}`
       + (st.measuring ? '\n측정 중…' : st.result ? `\n측정  ${JSON.stringify(st.result)}` : '');
   }
-  window.__dbg = { st, api, measure, setShow, setChars: (n) => { st.maxChars = n; }, setLoad: (b, p) => { st.ballLoad = b; st.partLoad = p; } };
-  return { onEnt, onBall, onHit, onPredict, rekey, hidden, frameStart, frameEnd };
+  window.__dbg = { st, api, measure, setShow, colGroup, onMap, setChars: (n) => { st.maxChars = n; }, setLoad: (b, p) => { st.ballLoad = b; st.partLoad = p; } };
+  return { onEnt, onBall, onHit, onPredict, rekey, hidden, frameStart, frameEnd, onMap };
 }

@@ -3,3 +3,10 @@
 # 캐릭터 시안 이미지(작업 기록용, 로컬에만 보관)
 game_character_*.png
 art/
+# Blender 맵 작업 파일(게임엔 glb/maps 만 씀)
+SLOPE_SNOWFIGHT_MAPS/blend/
+SLOPE_SNOWFIGHT_MAPS/_backup_v1/
+SLOPE_SNOWFIGHT_MAPS/_backup_v2/
+SLOPE_SNOWFIGHT_MAPS/renders/
+SLOPE_SNOWFIGHT_MAPS/glb/maps_raw/
+SLOPE_SNOWFIGHT_MAPS/glb/props/

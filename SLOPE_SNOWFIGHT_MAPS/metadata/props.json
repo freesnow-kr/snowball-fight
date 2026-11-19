@@ -1,0 +1,482 @@
+{
+ "pine_tree_01": {
+  "triangles": 1772,
+  "bytes": 42388,
+  "collider": {
+   "shape": "cylinder",
+   "body": 0.39,
+   "ball": 1.1,
+   "top": 8.6
+  },
+  "decor": false
+ },
+ "pine_tree_02": {
+  "triangles": 1212,
+  "bytes": 30188,
+  "collider": {
+   "shape": "cylinder",
+   "body": 0.45,
+   "ball": 1.26,
+   "top": 5.2
+  },
+  "decor": false
+ },
+ "pine_tree_03": {
+  "triangles": 1212,
+  "bytes": 29408,
+  "collider": {
+   "shape": "cylinder",
+   "body": 0.57,
+   "ball": 1.71,
+   "top": 6.6
+  },
+  "decor": false
+ },
+ "pine_tree_04": {
+  "triangles": 1792,
+  "bytes": 42408,
+  "collider": {
+   "shape": "cylinder",
+   "body": 0.42,
+   "ball": 1.26,
+   "top": 7.2
+  },
+  "decor": false
+ },
+ "pine_tree_far": {
+  "triangles": 740,
+  "bytes": 20624,
+  "collider": {
+   "shape": "cylinder",
+   "body": 0.39,
+   "ball": 1.1,
+   "top": 7.5
+  },
+  "decor": false
+ },
+ "snow_wall_low": {
+  "triangles": 1956,
+  "bytes": 37588,
+  "collider": {
+   "shape": "box",
+   "size": [
+    3.3,
+    0.7,
+    1.0
+   ]
+  },
+  "decor": false
+ },
+ "snow_wall_high": {
+  "triangles": 3246,
+  "bytes": 61152,
+  "collider": {
+   "shape": "box",
+   "size": [
+    3.3,
+    0.7,
+    2.2
+   ]
+  },
+  "decor": false
+ },
+ "snow_pile": {
+  "triangles": 950,
+  "bytes": 18300,
+  "collider": {
+   "shape": "cylinder",
+   "body": 1.1,
+   "ball": 1.2,
+   "top": 0.8
+  },
+  "decor": false
+ },
+ "snowman": {
+  "triangles": 3846,
+  "bytes": 77664,
+  "collider": {
+   "shape": "cylinder",
+   "body": 0.55,
+   "ball": 0.6,
+   "top": 2.2
+  },
+  "decor": false
+ },
+ "rock_01": {
+  "triangles": 2760,
+  "bytes": 53148,
+  "collider": {
+   "shape": "cylinder",
+   "body": 1.36,
+   "ball": 1.6,
+   "top": 1.3
+  },
+  "decor": false
+ },
+ "rock_02": {
+  "triangles": 2046,
+  "bytes": 40388,
+  "collider": {
+   "shape": "cylinder",
+   "body": 2.21,
+   "ball": 2.6,
+   "top": 2.08
+  },
+  "decor": false
+ },
+ "fence_wood": {
+  "triangles": 304,
+  "bytes": 12668,
+  "collider": {
+   "shape": "box",
+   "size": [
+    2.65,
+    0.3,
+    1.2
+   ]
+  },
+  "decor": false
+ },
+ "fence_red": {
+  "triangles": 304,
+  "bytes": 12668,
+  "collider": {
+   "shape": "box",
+   "size": [
+    2.65,
+    0.3,
+    1.2
+   ]
+  },
+  "decor": false
+ },
+ "wooden_cabin": {
+  "triangles": 19072,
+  "bytes": 467552,
+  "collider": {
+   "shape": "box",
+   "size": [
+    10.6,
+    10.1,
+    7.64
+   ],
+   "offset": [
+    0.0,
+    -1.1,
+    0.0
+   ]
+  },
+  "decor": false
+ },
+ "small_cabin": {
+  "triangles": 11932,
+  "bytes": 297876,
+  "collider": {
+   "shape": "box",
+   "size": [
+    6.8,
+    6.7,
+    5.82
+   ],
+   "offset": [
+    0.0,
+    -0.7,
+    0.0
+   ]
+  },
+  "decor": false
+ },
+ "night_lodge": {
+  "triangles": 17542,
+  "bytes": 433720,
+  "collider": {
+   "shape": "box",
+   "size": [
+    9.6,
+    8.7,
+    7.48
+   ],
+   "offset": [
+    0.0,
+    -0.9,
+    0.0
+   ]
+  },
+  "decor": false
+ },
+ "bench": {
+  "triangles": 528,
+  "bytes": 19672,
+  "collider": {
+   "shape": "box",
+   "size": [
+    1.9,
+    0.6,
+    0.9
+   ]
+  },
+  "decor": false
+ },
+ "snowboard_rack": {
+  "triangles": 1472,
+  "bytes": 35884,
+  "collider": {
+   "shape": "box",
+   "size": [
+    1.9,
+    0.6,
+    1.5
+   ]
+  },
+  "decor": false
+ },
+ "lantern_post": {
+  "triangles": 164,
+  "bytes": 9256,
+  "collider": {
+   "shape": "cylinder",
+   "body": 0.15,
+   "ball": 0.2,
+   "top": 2.1
+  },
+  "decor": false
+ },
+ "signpost": {
+  "triangles": 344,
+  "bytes": 15444,
+  "collider": {
+   "shape": "cylinder",
+   "body": 0.15,
+   "ball": 0.2,
+   "top": 2.2
+  },
+  "decor": false
+ },
+ "banner_blue": {
+  "triangles": 472,
+  "bytes": 18044,
+  "collider": {
+   "shape": "cylinder",
+   "body": 0.12,
+   "ball": 0.15,
+   "top": 3.4
+  },
+  "decor": false
+ },
+ "flag_red": {
+  "triangles": 201,
+  "bytes": 11644,
+  "collider": {
+   "shape": "cylinder",
+   "body": 0.1,
+   "ball": 0.12,
+   "top": 2.3
+  },
+  "decor": false
+ },
+ "jump_ramp": {
+  "triangles": 1322,
+  "bytes": 27524,
+  "collider": {
+   "shape": "box",
+   "size": [
+    3.0,
+    4.0,
+    1.4
+   ]
+  },
+  "decor": false
+ },
+ "ice_block": {
+  "triangles": 340,
+  "bytes": 9276,
+  "collider": {
+   "shape": "box",
+   "size": [
+    1.2,
+    1.2,
+    1.2
+   ]
+  },
+  "decor": false
+ },
+ "ice_pillar": {
+  "triangles": 248,
+  "bytes": 11936,
+  "collider": {
+   "shape": "cylinder",
+   "body": 0.55,
+   "ball": 0.6,
+   "top": 3.2
+  },
+  "decor": false
+ },
+ "ice_arch": {
+  "triangles": 3644,
+  "bytes": 74300,
+  "collider": {
+   "shape": "box",
+   "size": [
+    4.4,
+    2.4,
+    2.2
+   ],
+   "note": "tunnel: legs only block (x=\u00b11.8)"
+  },
+  "decor": false
+ },
+ "frozen_waterfall": {
+  "triangles": 934,
+  "bytes": 35116,
+  "collider": {
+   "shape": "box",
+   "size": [
+    4.6,
+    1.4,
+    7.0
+   ]
+  },
+  "decor": false
+ },
+ "tree_stump": {
+  "triangles": 376,
+  "bytes": 13708,
+  "collider": {
+   "shape": "cylinder",
+   "body": 0.65,
+   "ball": 0.7,
+   "top": 0.8
+  },
+  "decor": false
+ },
+ "ski_lift_tower": {
+  "triangles": 948,
+  "bytes": 33940,
+  "collider": {
+   "shape": "cylinder",
+   "body": 0.45,
+   "ball": 0.5,
+   "top": 9.5
+  },
+  "decor": false
+ },
+ "ski_lift_chair": {
+  "triangles": 276,
+  "bytes": 13568,
+  "collider": {},
+  "decor": true
+ },
+ "ski_lift_station": {
+  "triangles": 916,
+  "bytes": 33836,
+  "collider": {
+   "shape": "box",
+   "size": [
+    5,
+    4,
+    4
+   ]
+  },
+  "decor": false
+ },
+ "gate_red": {
+  "triangles": 124,
+  "bytes": 8504,
+  "collider": {
+   "shape": "box",
+   "size": [
+    1.6,
+    0.2,
+    1.8
+   ]
+  },
+  "decor": false
+ },
+ "gate_blue": {
+  "triangles": 124,
+  "bytes": 8508,
+  "collider": {
+   "shape": "box",
+   "size": [
+    1.6,
+    0.2,
+    1.8
+   ]
+  },
+  "decor": false
+ },
+ "arch_gate": {
+  "triangles": 816,
+  "bytes": 20148,
+  "collider": {
+   "shape": "cylinders",
+   "parts": [
+    [
+     -3.0,
+     0.0,
+     0.45
+    ],
+    [
+     3.0,
+     0.0,
+     0.45
+    ]
+   ],
+   "top": 3.3
+  },
+  "decor": false
+ },
+ "safety_net": {
+  "triangles": 2020,
+  "bytes": 68192,
+  "collider": {
+   "shape": "box",
+   "size": [
+    5.0,
+    0.2,
+    1.6
+   ]
+  },
+  "decor": false
+ },
+ "lamp_post": {
+  "triangles": 240,
+  "bytes": 10648,
+  "collider": {
+   "shape": "cylinder",
+   "body": 0.2,
+   "ball": 0.25,
+   "top": 4.3
+  },
+  "decor": false
+ },
+ "floodlight_tower": {
+  "triangles": 432,
+  "bytes": 17184,
+  "collider": {
+   "shape": "cylinder",
+   "body": 0.5,
+   "ball": 0.55,
+   "top": 11.6
+  },
+  "decor": false
+ },
+ "treehouse_tree": {
+  "triangles": 4116,
+  "bytes": 101632,
+  "collider": {
+   "shape": "cylinder",
+   "body": 1.3,
+   "ball": 1.5,
+   "top": 22,
+   "platform_z": 4.2
+  },
+  "decor": false
+ },
+ "aurora": {
+  "triangles": 576,
+  "bytes": 17300,
+  "collider": {},
+  "decor": true
+ }
+}

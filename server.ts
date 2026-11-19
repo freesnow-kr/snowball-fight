@@ -1,6 +1,6 @@
 // 실행: deno run --allow-net --allow-read --allow-env server.ts  →  http://localhost:8000
 // 맵마다 방이 하나씩 있고(maps.js), 방마다 플레이어·눈덩이·눈사람·점수·판이 따로 돈다.
-import { blocksBall, hitsPenguin, MAPS, mapById, pushOut } from "./maps.js";
+import { blocksBall, GRAVITY, hitsPenguin, JUMP_V, MAPS, mapById, pushOut, rampAt, rampVy, sweep } from "./maps.js";
 
 const ARENA = 50, MAX_HUMANS = 30, MAX_AMMO = 10, HP = 3, G = -15, DT = 1 / 30, MAX_PILES = 40;
 const MOVE_SPEED = 8, MOVE_BURST = 3; // 위치 보고 검사: 초당 8m(달리기 7.2+여유)씩 쌓이는 이동 한도, 최대 3m까지 모아 둠(넉백·전송 지연)
@@ -20,8 +20,8 @@ const BOT_NAMES = ["눈송이", "고드름", "함박", "싸락", "서리", "눈�
 
 type Sock = { send(s: string): void };
 const NOSOCK: Sock = { send() {} };
-type Obstacle = { kind: string; x: number; y: number; z: number; s: number; ball: number; body: number; top: number };
-type MapDef = { id: string; name: string; emoji: string; spawnX: number[]; h: (x: number, z: number) => number; obstacles: Obstacle[] };
+type Obstacle = { kind: string; x: number; y: number; z: number; s: number; ball: number; body: number; top: number; hw?: number; hd?: number; rot?: number; hop?: number };
+type MapDef = { id: string; name: string; emoji: string; spawnX: number[]; spawns?: number[][][]; h: (x: number, z: number) => number; obstacles: Obstacle[] };
 export type Room = {
   map: MapDef; players: Map<number, P>; balls: Ball[]; piles: Pile[]; events: unknown[];
   game: { scores: number[]; roundEnd: number; breakUntil: number };
@@ -34,7 +34,9 @@ export type P = {
   lastThrow: number; roll: number; sock: Sock;
   hist: number[][]; // 최근 0.5초 위치 기록 [시각, x, y, z]
   rtt: number; pingAt: number; // 왕복 시간(ms, 평균), 마지막 ping 보낸 시각
-  moveBudget: number; moveT: number; // 이번 보고에서 움직여도 되는 거리(m)와 마지막 보고 시각
+  moveBudget: number; moveT: number;
+  // 서버가 직접 굴리는 수직 상태: 땅에 있나, 공중이면 뜬 시각·높이·처음 위로 속도(점프 8, 점프대 최대 9, 맞고 튕김 4)
+  ground: boolean; airT: number; airY: number; airVy: number; hspd: number; onRamp: boolean; // 이번 보고에서 움직여도 되는 거리(m)와 마지막 보고 시각
   strafe: number; strafeUntil: number; throwAt: number; // 봇 전용
 };
 type Ball = { id: number; owner: number; team: number; x: number; y: number; z: number; vx: number; vy: number; vz: number; age: number; rewind: [number, number] | null };
@@ -68,12 +70,20 @@ export function pickRoom(want: unknown): Room | null {
 
 // 팀 0(핑크)은 서쪽, 팀 1(블루)은 동쪽에서 서로 마주 보고 시작
 function spawnAt(p: P) {
-  const side = p.team === 0 ? -1 : 1, [a, b] = p.room.map.spawnX;
-  p.x = side * (a + Math.random() * (b - a));
-  p.z = Math.random() * 20 - 5;
-  p.y = p.room.map.h(p.x, p.z);
-  p.yaw = -side * Math.PI / 2;
+  const side = p.team === 0 ? -1 : 1, [a, b] = p.room.map.spawnX, sp = p.room.map.spawns?.[p.team];
+  if (sp?.length) { // Blender 맵: 메타데이터의 안전한 스폰 자리(장애물에서 2.5m+, 평탄) 중 하나 ±1m, 맵 가운데를 바라봄
+    const [sx, sz] = pick(sp);
+    [p.x, p.z] = pushOut(p.room.map, clampA(sx + Math.random() * 2 - 1), clampA(sz + Math.random() * 2 - 1));
+    p.y = p.room.map.h(p.x, p.z);
+    p.yaw = Math.atan2(-p.x, -p.z);
+  } else {
+    p.x = side * (a + Math.random() * (b - a));
+    p.z = Math.random() * 20 - 5;
+    p.y = p.room.map.h(p.x, p.z);
+    p.yaw = -side * Math.PI / 2;
+  }
   p.moveBudget = MOVE_BURST;
+  Object.assign(p, { ground: true, airVy: 0, hspd: 0, onRamp: false });
   p.hist = []; // 부활하면 예전 자리로는 못 맞게
   p.moveT = Date.now();
 }
@@ -81,7 +91,7 @@ function spawnAt(p: P) {
 function addPlayer(room: Room, sock: Sock, name: string, team: number, bot: boolean): P {
   const p: P = {
     id: nextId++, name, team, bot, room, x: 0, y: 0, z: 0, yaw: 0, hp: HP, ammo: MAX_AMMO, score: 0, freezes: 0,
-    frozenUntil: 0, gather: false, gatherT: 0, lastThrow: 0, roll: 0, sock, hist: [], rtt: 100, pingAt: 0, moveBudget: MOVE_BURST, moveT: 0,
+    frozenUntil: 0, gather: false, gatherT: 0, lastThrow: 0, roll: 0, sock, hist: [], rtt: 100, pingAt: 0, moveBudget: MOVE_BURST, moveT: 0, ground: true, airT: 0, airY: 0, airVy: 0, hspd: 0, onRamp: false,
     strafe: 1, strafeUntil: 0, throwAt: Date.now() + 1000 + Math.random() * 2000,
   };
   spawnAt(p);
@@ -135,6 +145,51 @@ function place(p: P) {
   events.push(["pile", pile]);
 }
 
+// 보고된 발 높이 y 를 서버의 중력 계산으로 검증한 값. 땅 밑으로는 못 가고, 공중 높이는 탄도 곡선 아래로만
+const AIR_TOL = 0.35, LAUNCH_EARLY = 120; // 높이 여유(m), 뜬 시각을 앞당겨 잡는 여유(ms)
+// 허용 높이 = 곡선이 [t−0.25초, t] 사이에 닿는 가장 높은 값 + 여유. 뜬 시각을 0.12초 앞당겨 잡았고(위) 보고가 늦거나 몰려 올 수 있어서
+// 내려오는 쪽도 그만큼 늦게까지 봐 줌 → 정상 점프는 안 깎이고, 부양은 점프 한 번 체공(0.67초)+0.3초 안에 내려옴
+const AIR_WINDOW = 0.25;
+function ceilAt(p: P, now: number) {
+  const t = (now - p.airT) / 1000, tPeak = p.airVy / GRAVITY, tt = Math.min(t, Math.max(t - AIR_WINDOW, tPeak, 0));
+  return p.airY + p.airVy * tt - 0.5 * GRAVITY * tt * tt + AIR_TOL;
+}
+// 곡선이 높이 gy 로 내려오는 시각(초). 안 내려오면 null
+function landT(p: P, gy: number) {
+  const a = 0.5 * GRAVITY, b = -p.airVy, c = gy - p.airY, d = b * b - 4 * a * c; // a t² + b t + c = 0
+  return d < 0 ? null : (-b + Math.sqrt(d)) / (2 * a);
+}
+export function verticalCheck(p: P, x: number, z: number, y: number, now: number) {
+  const gy = p.room.map.h(x, z);
+  if (y <= gy + 0.05) return gy; // 땅에 섬
+  // 보고는 0.066초마다라 실제로 뛴 순간은 보고보다 최대 그만큼 앞(+지연 흔들림) → 뜬 시각을 0.12초 앞으로 잡음
+  const launchV = () => Math.max(JUMP_V, p.onRamp ? rampVy(p.hspd) + 0.5 : 0); // 점프 / 점프대(서버가 잰 속도로만)
+  if (p.ground) { // 땅에서 막 뜸: 위로 올라가면 점프·점프대, 아니면 그냥 떨어짐(절벽·턱)
+    Object.assign(p, { ground: false, airT: now - LAUNCH_EARLY, airY: p.y, airVy: y > p.y + 0.02 ? launchV() : 0 });
+  }
+  let ceil = ceilAt(p, now);
+  // 보고 사이에 내려앉았다가 바로 다시 뛴 경우: 곡선이 이미 땅에 닿을 때가 됐는데 위로 올라가 있음 → 착지한 순간에서 새 점프
+  // (허용 범위를 넘었고, 올라가는 중이고, 서버 곡선으로는 이미 내려앉았을 시각)
+  if (y > ceil && y > p.y + 0.02) {
+    const tl = landT(p, gy);
+    if (tl !== null && now - p.airT - LAUNCH_EARLY >= tl * 1000 - 100) {
+      Object.assign(p, { airT: now - LAUNCH_EARLY, airY: gy, airVy: JUMP_V }); // 다시 뛴 건 직전 보고 뒤 → 지금에서 0.12초 앞
+      ceil = ceilAt(p, now);
+    }
+  }
+  if (ceil <= gy + 0.05) { p.ground = true; return gy; } // 곡선이 땅 밑: 착지
+  if (y <= ceil) return y; // 허용 범위 안: 화면 높이 그대로(정상 점프·지연)
+  // 허용 범위를 넘음(부양·과한 상승): 보고값 대신 서버가 계산한 곡선 높이를 씀 → 높게 보내도 정상 점프처럼만 움직임
+  const tn = Math.max(0, (now - p.airT) / 1000);
+  return Math.max(gy, Math.min(ceil, p.airY + p.airVy * tn - 0.5 * GRAVITY * tn * tn));
+}
+// 맞고 튕김(화면은 vy = max(vy, 4)): 그 순간부터 새 곡선. 이미 더 빨리 오르던 중이면 그 속도 그대로
+function knockUp(p: P, now: number) {
+  if (p.bot) return;
+  const vNow = p.ground ? 0 : p.airVy - GRAVITY * (now - p.airT) / 1000;
+  Object.assign(p, { ground: false, airT: now, airY: p.y, airVy: Math.max(4, vNow) });
+}
+
 // deno-lint-ignore no-explicit-any
 export function handle(p: P, m: any, now = Date.now()) {
   const frozen = p.frozenUntil > now, room = p.room;
@@ -142,20 +197,26 @@ export function handle(p: P, m: any, now = Date.now()) {
     case "p": {
       const x = num(m.x, -ARENA, ARENA), y = num(m.y, -10, 60), z = num(m.z, -ARENA, ARENA), yaw = num(m.yaw, -1e4, 1e4);
       if (frozen || x === null || y === null || z === null || yaw === null) return;
-      // 마지막 보고 뒤 흐른 시간만큼 이동 한도가 쌓인다. 한도보다 멀리 가면 거절하고 서버 위치로 되돌림
-      p.moveBudget = Math.min(MOVE_BURST, p.moveBudget + MOVE_SPEED * Math.max(0, now - p.moveT) / 1000);
+      // 서버는 마지막으로 승인한 위치(p.x,y,z)에서 출발해 직접 검증한 위치만 받는다. 보고된 좌표는 '가고 싶은 곳'일 뿐
+      // 1) 속도: 마지막 보고 뒤 흐른 시간만큼 이동 한도가 쌓임(초당 8m, 최대 3m). 넘으면 거절하고 서버 위치로 되돌림
+      const dt = Math.max(0, now - p.moveT) / 1000;
+      p.moveBudget = Math.min(MOVE_BURST, p.moveBudget + MOVE_SPEED * dt);
       p.moveT = now;
-      const [cx, cz] = pushOut(room.map, x, z); // 나무·바위·오두막 안으로는 못 들어감
+      if (Math.hypot(x - p.x, z - p.z) > p.moveBudget + 0.25) { p.sock.send(JSON.stringify({ t: "pos", x: p.x, y: p.y, z: p.z })); return; }
+      // 2) 높이: 중력을 서버가 계산. 공중이면 '뜬 순간 높이 + 위로 속도·t − 12t²'(+여유 0.35m)보다 높을 수 없음 → 공중 부양·중력 무시 불가
+      const ny = verticalCheck(p, x, z, y, now);
+      // 3) 벽: 이전 승인 위치 → 요청 위치를 몸 반지름으로 쓸고 지나가며 판정(sweep). 얇은 벽도 못 건너뛰고, 비스듬히 부딪히면 벽을 따라 미끄러짐
+      const [cx, cz] = sweep(room.map, p.x, p.z, x, z, p.y, ny); // 발 높이는 지난 승인 높이 → 이번 높이로 이어서
       const step = Math.hypot(cx - p.x, cz - p.z);
-      if (step > p.moveBudget) {
-        p.sock.send(JSON.stringify({ t: "pos", x: p.x, y: p.y, z: p.z }));
-        return;
-      }
-      p.moveBudget -= step;
-      // ponytail: 장애물은 끝점만 밀어냄. 한 번에 최대 3m라 얇은 통나무를 건너뛸 수는 있음. 막으려면 이동 선분으로 검사
+      p.moveBudget = Math.max(0, p.moveBudget - step);
+      if (dt > 0) p.hspd += (Math.hypot(cx - p.x, cz - p.z) / Math.max(dt, 0.033) - p.hspd) * 0.5; // 점프대 발사 속도 검증용 수평 속도
       if (p.roll) p.roll = Math.min(1.2, p.roll + step * 0.03);
-      const gy = room.map.h(cx, cz); // 땅 밑·공중 부양 방지 (점프 최고 높이는 약 1.3m)
-      Object.assign(p, { x: cx, y: Math.min(Math.max(y, gy), gy + 2), z: cz, yaw });
+      const gy = room.map.h(cx, cz);
+      Object.assign(p, { x: cx, y: Math.max(ny, gy), z: cz, yaw });
+      if (p.y <= gy + 0.05) { p.ground = true; p.y = gy; }
+      p.onRamp = p.ground && !!rampAt(room.map, cx, cz);
+      // 클라이언트와 0.3m 넘게 어긋나면(벽 관통 시도 등) 서버 위치로 맞춤. 높이만 조금 다른 건(지연·지면 오차) 보내지 않음 → 정상 점프가 안 끊김
+      if (Math.hypot(cx - x, cz - z) > 0.3 || y - p.y > 1) p.sock.send(JSON.stringify({ t: "pos", x: p.x, y: p.y, z: p.z }));
       return;
     }
     case "pong": { // ping 에 대한 답: 왕복 시간 평균(튀는 값은 0.2만 반영)
@@ -228,6 +289,7 @@ export function tick(room: Room, now = Date.now()) {
         if (now >= game.breakUntil) game.scores[b.team]++;
         p.hp--;
         events.push(["hit", b.id, r2(b.x), r2(b.y), r2(b.z), p.id, r2((b.vx / s) * 6), r2((b.vz / s) * 6)]);
+        knockUp(p, now); // 화면에선 맞으면 살짝 튀어 오름(vy 4)
         if (p.hp <= 0) Object.assign(p, { hp: HP, frozenUntil: now + 3000, gather: false, roll: 0, freezes: p.freezes + 1 });
         return false;
       }
@@ -348,6 +410,8 @@ if (import.meta.main) {
     "/debug.js": ["./debug.js", "text/javascript"], // 개발용. localhost?debug 일 때만 화면이 불러옴
     "/assets/penguin_blue.glb": ["./assets/penguin_blue.glb", "model/gltf-binary"],
     "/maps.js": ["./maps.js", "text/javascript"],
+    "/maps_glb.js": ["./maps_glb.js", "text/javascript"], // Blender 맵 높이·장애물·스폰 (생성 파일)
+    "/mapglb.js": ["./mapglb.js", "text/javascript"], // Blender 맵 GLB 로딩·인스턴싱
     "/favicon.png": ["./favicon.png", "image/png"],
     "/og.jpg": ["./og.jpg", "image/jpeg"],
   };
@@ -359,6 +423,8 @@ if (import.meta.main) {
     if (FILES[path]) return serveFile(req, ...FILES[path]);
     const ld = path.match(/^\/assets\/loading\/([a-z0-9-]+\.webp)$/); // 로딩 화면 이미지
     if (ld) { try { return await serveFile(req, `./assets/loading/${ld[1]}`, "image/webp"); } catch { return new Response("not found", { status: 404 }); } }
+    const mp = path.match(/^\/assets\/maps\/([a-z_]+)\.glb$/); // Blender 맵 GLB (이름은 영문 소문자·밑줄만)
+    if (mp) { try { return await serveFile(req, `./SLOPE_SNOWFIGHT_MAPS/glb/maps/${mp[1]}.glb`, "model/gltf-binary"); } catch { return new Response("not found", { status: 404 }); } }
     if (path !== "/ws") return serveFile(req, "./index.html", "text/html");
     const { socket: ws, response } = Deno.upgradeWebSocket(req);
     const socket = LAG ? { send: (s: string) => setTimeout(() => ws.readyState === 1 && ws.send(s), LAG), close: () => ws.close() } : ws;

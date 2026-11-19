@@ -134,6 +134,14 @@
   #loading .ld-err button { margin-top: 8px; min-height: 44px; padding: 0 22px; border: 0; border-radius: 99px; background: #ff6fae; color: #fff;
     font: 800 16px system-ui, sans-serif; box-shadow: 0 3px 0 #e04f8f; cursor: pointer; }
   #loading.err .ld-stripes::before, #loading.err .ld-peng { animation: none; }
+  /* Blender 맵(GLB) 불러오는 동안: 화면 가운데 진행률. 다 받기 전엔 움직이지 않음 */
+  #mapLoad { position: fixed; inset: 0; z-index: 90; display: none; place-items: center; background: #cfe9ffb3; pointer-events: none; }
+  #mapLoad.on { display: grid; pointer-events: auto; }
+  #mapLoad .box { display: grid; gap: 10px; justify-items: center; padding: 18px 22px; border-radius: 18px; background: #ffffffee; box-shadow: 0 6px 18px #1479d433; font: 800 16px system-ui, sans-serif; color: #1479d4; }
+  #mapLoad .bar { width: min(320px, 70vw); height: 14px; border-radius: 99px; background: #d6ecff; overflow: hidden; }
+  #mapLoad .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #38d5ff, #1687f5); transition: width .2s; }
+  #mapLoad button { display: none; min-height: 44px; padding: 0 22px; border: 0; border-radius: 99px; background: #ff6fae; color: #fff; font: 800 15px system-ui; }
+  #mapLoad.err button { display: block; } #mapLoad.err .bar { display: none; }
   @keyframes ldStripe { to { transform: translateX(28.28px); } } /* 줄무늬 한 칸(20px / sin45°) */
   @keyframes ldBob { to { transform: translate(50%, -4px); } }
   @keyframes ldJump { 40% { transform: translate(50%, -18px) rotate(-8deg); } 100% { transform: translate(50%, 0); } }
@@ -232,6 +240,7 @@ window.LOAD = (() => {
   return { step, task, fail };
 })();
 </script>
+<div id="mapLoad"><div class="box"><span id="mlText">🗺️ 맵 불러오는 중… 0%</span><div class="bar"><i id="mlFill"></i></div><button id="mlRetry">다시 시도</button></div></div>
 <div id="hud"></div>
 <div id="board"></div>
 <div id="teams"></div>
@@ -272,7 +281,8 @@ window.LOAD = (() => {
 <script type="module" onerror="LOAD.fail('engine')">
 import * as THREE from 'three';
 import { loadPenguin, Penguin } from './penguin.js';
-import { blocksBall, hitsPenguin, MAPS, mapById, pushOut } from './maps.js';
+import { blocksBall, GRAVITY, hitsPenguin, JUMP_V, MAPS, mapById, pushOut, rampLaunch, sweep } from './maps.js';
+import { loadMap, releaseGPU } from './mapglb.js';
 LOAD.step('engine', 1); // three.js·게임 코드를 다 받아 실행 시작
 
 const TEAM_COLORS = ['#ff65a8', '#2f7bff'], TEAM_NAMES = ['💗 핑크팀', '🔵 블루팀'], TEAM_DOTS = ['💗', '🔵'];
@@ -280,7 +290,8 @@ const EMOTE_FACE = ['excited', 'excited', 'focused', 'heart', 'wink', 'normal'];
 const ARENA = 50, MAX_AMMO = 10, G = -15, EMOTES = ['👋', '😂', '😡', '❤️', '😎', '🙏'];
 const $ = (id) => document.getElementById(id);
 // 개발용 디버그(히트박스·궤적·판 끝내기·성능 측정): localhost 에서 ?debug 일 때만 debug.js 를 불러옴
-const DEBUG = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) && new URLSearchParams(location.search).has('debug');
+// 같은 와이파이의 실제 폰에서 재려고 사설 IP(192.168.·10.·172.16–31.·*.local)도 허용. 배포 주소에선 안 켜짐
+const DEBUG = /^(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|[\w-]+\.local)$/.test(location.hostname) && new URLSearchParams(location.search).has('debug');
 let dbg = null;
 const isTouch = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
 // iOS Safari 는 user-scalable=no 를 무시해서, 조이스틱+버튼을 두 엄지로 같이 누르거나 버튼을 빠르게 연타하면 페이지가 확대됨.
@@ -320,7 +331,7 @@ function fit() {
 }
 fit();
 addEventListener('resize', fit);
-scene.add(new THREE.HemisphereLight('#ffffff', '#8aa7c7', 1.3));
+const hemi = new THREE.HemisphereLight('#ffffff', '#8aa7c7', 1.3); scene.add(hemi);
 const sun = new THREE.DirectionalLight('#fff4e0', 1.6);
 sun.position.set(30, 50, 20); sun.castShadow = true; sun.shadow.mapSize.setScalar(isTouch ? 1024 : 2048); // 폰은 그림자 해상도를 낮춰 가볍게
 Object.assign(sun.shadow.camera, { left: -60, right: 60, top: 60, bottom: -60, far: 150 });
@@ -330,6 +341,7 @@ scene.add(sun);
 const lam = (color) => new THREE.MeshLambertMaterial({ color });
 const M = { snow: lam('#f7fbff'), white: lam('#ffffff'), dark: lam('#22263a'), trunk: lam('#6b4a2f'),
   leaf: lam('#2f6b4f'), carrot: lam('#ff8a3d'), pole: lam('#5b6577'), chair: lam('#3b7dd8'), hut: lam('#a0522d'), roof: lam('#c23b3b') };
+const partM = new THREE.MeshLambertMaterial({ color: '#ffffff' }), ballM = new THREE.MeshLambertMaterial({ color: '#ffffff' }); // 눈가루·눈덩이(야간엔 약하게 빛남, applyEnv)
 function add(parent, geo, mat, x = 0, y = 0, z = 0) {
   const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m;
 }
@@ -363,11 +375,72 @@ function drawObstacle(o) {
   g.scale.setScalar(o.s); g.rotation.y = o.rot ?? 0;
   world.add(g);
 }
-// ponytail: 맵을 바꿀 때 옛 지오메트리를 dispose 하지 않음. 맵을 자주 오가 메모리가 문제되면 그때 정리
+// 맵별 하늘·조명: Blender 맵은 메타데이터의 환경값(나이트 리조트는 조명탑·산장 불빛 라이트 최대 8개), 기존 맵은 원래 값
+// 야간: 눈 위 불빛 웅덩이는 GLB 지형에 구워 둠(발광 텍스처, 실시간 조명 0개로도 보임).
+// 실시간 조명은 개수를 고정(셰이더 다시 만들지 않음): 조명탑 스포트(PC 4·폰 0) + 순환 점조명(PC 4·폰 3)이
+// 가로등·산장 불빛 중 내 근처로 옮겨 다님. 바뀔 땐 서서히 꺼졌다가 옮겨서 켬 → 깜빡이지 않음
+const envLights = new THREE.Group(); scene.add(envLights);
+let lightPool = [], poolSrc = [], poolT = 0;
+function applyEnv(m) {
+  envLights.clear(); lightPool = []; poolSrc = [];
+  const e = m.env, fog = m.fog ?? [45, 115];
+  scene.fog.near = fog[0]; scene.fog.far = fog[1];
+  hemi.color.set(e?.hemisphere.sky ?? '#ffffff'); hemi.groundColor.set(e?.hemisphere.ground ?? '#8aa7c7'); hemi.intensity = e?.hemisphere.intensity ?? 1.3;
+  sun.color.set(e?.sun?.color ?? '#fff4e0'); sun.intensity = e?.sun?.intensity ?? 1.6;
+  // 야간: 눈덩이·눈가루가 어두운 눈밭에 묻히지 않게 약하게 스스로 빛나게(달빛 같은 푸른 흰색). 낮 맵은 0
+  const night = e?.preset === 'night';
+  ballM.emissive.set('#cfdcff'); ballM.emissiveIntensity = night ? 0.55 : 0;
+  partM.emissive.set('#e6eeff'); partM.emissiveIntensity = night ? 0.8 : 0;
+  const lights = e?.lights ?? [];
+  for (const l of lights.filter((l) => l.type === 'spot').slice(0, isTouch ? 0 : 4)) {
+    const L = new THREE.SpotLight(l.color, l.intensity, l.distance, l.angle, l.penumbra, 2);
+    L.position.set(...l.position); L.target.position.set(...l.target); envLights.add(L, L.target);
+  }
+  poolSrc = lights.filter((l) => l.type !== 'spot');
+  for (let i = 0; i < Math.min(poolSrc.length, isTouch ? 3 : 4); i++) {
+    const L = new THREE.PointLight('#ffd9a0', 0, 14, 2); L.userData = { src: null, want: 0 }; envLights.add(L); lightPool.push(L);
+  }
+}
+function updateEnvLights(dt, x, z) {
+  if (!lightPool.length) return;
+  if ((poolT -= dt) <= 0) { // 0.3초마다 가까운 불빛 고르기
+    poolT = 0.3;
+    const near = [...poolSrc].sort((a, b) => Math.hypot(a.position[0] - x, a.position[2] - z) - Math.hypot(b.position[0] - x, b.position[2] - z)).slice(0, lightPool.length);
+    for (const L of lightPool) L.userData.want = near.includes(L.userData.src) ? L.userData.src.intensity : 0;
+    for (const s of near) {
+      if (lightPool.some((L) => L.userData.src === s)) continue;
+      const free = lightPool.find((L) => L.userData.want === 0 && L.intensity < 0.5);
+      if (free) { free.userData.src = s; free.userData.want = s.intensity; free.position.set(...s.position); free.color.set(s.color); free.distance = s.distance; }
+    }
+  }
+  for (const L of lightPool) L.intensity += (L.userData.want - L.intensity) * Math.min(1, dt * 3); // 약 0.3초에 걸쳐 켜고 끔
+}
+// 맵 GLB 불러오기: 진행률 표시, 실패하면 다시 시도. 다 받기 전엔 mapReady=false 라 움직이지 않음(서버 자리에서 대기)
+let mapReady = true, mapRoot = null, mapToken = 0;
+function showMapLoad(f) {
+  const el = $('mapLoad'); el.classList.toggle('on', f !== false); el.classList.toggle('err', f === 'err');
+  if (f === 'err') $('mlText').textContent = '맵을 불러오지 못했어요';
+  else if (f !== false) { $('mlText').textContent = `🗺️ ${map.emoji} ${map.name} 불러오는 중… ${Math.floor(f * 100)}%`; $('mlFill').style.width = Math.floor(f * 100) + '%'; }
+}
+function loadGlbMap(m) {
+  const t = mapToken, w = world;
+  mapReady = false; showMapLoad(0);
+  loadMap(m.glb, (f) => t === mapToken && showMapLoad(f)).then(({ root }) => {
+    if (t !== mapToken) return; // 그사이 다른 맵으로 바뀜
+    w.add(root); mapRoot = root; mapReady = true; showMapLoad(false);
+  }, (err) => { if (t === mapToken) { console.error('[맵] 불러오기 실패', err); showMapLoad('err'); } });
+}
+$('mlRetry').onclick = () => loadGlbMap(map);
 function buildMap(id) {
-  if (world) scene.remove(world);
+  if (world) { scene.remove(world); if (!map.glb) disposeTree(world); } // 코드로 지은 맵: 맵마다 새로 만든 지오메트리·케이블 재질 해제
+  if (mapRoot) { releaseGPU(mapRoot); mapRoot = null; } // Blender 맵: GPU 만 놓고 객체는 캐시에 남김
+  mapToken++;
   map = mapById(id); H = map.h; world = new THREE.Group(); chairs = [];
-  scene.background.set(SKY[map.id][0]); scene.fog.color.set(SKY[map.id][1]);
+  const sky = map.sky ?? SKY[map.id];
+  scene.background.set(sky[0]); scene.fog.color.set(sky[1]);
+  applyEnv(map); dbg?.onMap?.(map);
+  if (map.glb) { scene.add(world); return loadGlbMap(map); }
+  mapReady = true; showMapLoad(false);
   const geo = new THREE.PlaneGeometry(120, 120, 90, 90).rotateX(-Math.PI / 2), gp = geo.attributes.position;
   for (let i = 0; i < gp.count; i++) gp.setY(i, H(gp.getX(i), gp.getZ(i)));
   geo.computeVertexNormals();
@@ -493,10 +566,10 @@ function addEnt(id, name, team, bot) {
   ents.set(id, { c, name, team, bot, buf: [], vx: 0, vz: 0, spd: 0, throwT: 0, gather: 0, phase: 0, x: null, y: 0, z: 0, yaw: 0, tx: 0, ty: 0, tz: 0, tyaw: 0, frozen: 0, roll: 0, hp: 3, ammo: 5, score: 0, emoUntil: 0 });
   dbg?.onEnt(ents.get(id));
 }
-function removeEnt(id) { const e = ents.get(id); if (e) { e.c.gone = true; e.c.peng?.dispose(); scene.remove(e.c.g); ents.delete(id); } }
+function removeEnt(id) { const e = ents.get(id); if (e) { e.c.gone = true; e.c.peng?.dispose(); scene.remove(e.c.g); disposeTree(e.c.g); ents.delete(id); } } // 펭귄을 먼저 떼고 → 이름표·얼음·눈덩이만 해제
 function removeBall(id) { const b = balls.get(id); if (b) { scene.remove(b.mesh); balls.delete(id); } }
 function setPile(p) {
-  piles.get(p.id) && scene.remove(piles.get(p.id));
+  if (piles.has(p.id)) { scene.remove(piles.get(p.id)); disposeTree(piles.get(p.id)); }
   const g = new THREE.Group(); let y = 0;
   p.parts.forEach((r, i) => { y += i ? r * 0.85 : r; add(g, sphere(r), M.white, 0, y, 0); y += r * 0.85; });
   if (p.parts.length === 3) { // 꼭대기에 얼굴
@@ -507,11 +580,24 @@ function setPile(p) {
   }
   g.position.set(p.x, H(p.x, p.z) - 0.1, p.z); scene.add(g); piles.set(p.id, g);
 }
-const partGeo = sphere(0.08), ballGeo = sphere(0.18);
+const partGeo = new THREE.IcosahedronGeometry(0.08, 1), ballGeo = sphere(0.18); // 눈가루: 지름 16cm 라 80각형으로 충분(구 16×12=360각형 → 측정상 파티클 많을 때 삼각형 부담)
+// 화면에서 뺀 객체가 혼자 쓰던 GPU 자원 해제. 같이 쓰는 것(공용 재질·얼음 껍질·눈덩이·파티클 지오메트리,
+// 스프라이트 공용 사각형, 펭귄 GLB — 펭귄은 Penguin.dispose 가 먼저 떼어 냄)은 남김
+const SHARED = new Set([...Object.values(M), partM, ballM, ROCK, ICE, iceM, iceLineM, iceGlintM, iceBaseM, iceShellGeo, partGeo, ballGeo]);
+function disposeTree(o) {
+  o.traverse((x) => {
+    if (x.geometry && !x.isSprite && !SHARED.has(x.geometry)) x.geometry.dispose();
+    for (const m of [].concat(x.material ?? [])) if (!SHARED.has(m)) { m.map?.dispose(); m.dispose(); }
+  });
+}
+// 눈가루 파티클: 전부 InstancedMesh 하나로 그림(파티클 수와 상관없이 draw call 1개). 넘치면 오래된 것부터 버림
+const PART_MAX = 600;
+const partMesh = new THREE.InstancedMesh(partGeo, partM, PART_MAX); partMesh.count = 0; partMesh.frustumCulled = false; scene.add(partMesh);
+const partTmp = new THREE.Object3D();
 function puff(x, y, z, n) {
   for (let i = 0; i < n; i++) {
-    const m = add(scene, partGeo, M.white, x, y, z);
-    parts.push({ m, vx: (Math.random() - 0.5) * 6, vy: Math.random() * 5, vz: (Math.random() - 0.5) * 6, life: 0.6 });
+    if (parts.length >= PART_MAX) parts.shift();
+    parts.push({ x, y, z, vx: (Math.random() - 0.5) * 6, vy: Math.random() * 5, vz: (Math.random() - 0.5) * 6, life: 0.6 });
   }
 }
 let ac;
@@ -540,7 +626,7 @@ function onMsg(m) {
   if (m.t === 'welcome') {
     for (const id of [...ents.keys()]) removeEnt(id);
     for (const id of [...balls.keys()]) removeBall(id);
-    for (const g of piles.values()) scene.remove(g);
+    for (const g of piles.values()) { scene.remove(g); disposeTree(g); }
     piles.clear();
     if (m.map !== map.id) buildMap(m.map);
     myId = m.id; spawned = false; mySeqs.clear();
@@ -582,7 +668,7 @@ function onEv(ev) {
         break;
       }
       if (ents.has(owner)) ents.get(owner).throwT = performance.now(); // 던지는 동작
-      balls.set(id, { mesh: add(scene, ballGeo, M.white), x, y, z, vx, vy, vz, age: 0, owner, hand: true });
+      balls.set(id, { mesh: add(scene, ballGeo, ballM), x, y, z, vx, vy, vz, age: 0, owner, hand: true });
       break;
     }
     case 'hit': {
@@ -607,11 +693,11 @@ function onEv(ev) {
     }
     case 'round': spawned = false; banner('새 판 시작! ⛄', 2000); break;
     case 'pile': setPile(ev[1]); sfx(330, 0.1, 0.06); break;
-    case 'pilex': scene.remove(piles.get(ev[1])); piles.delete(ev[1]); break;
+    case 'pilex': if (piles.has(ev[1])) { scene.remove(piles.get(ev[1])); disposeTree(piles.get(ev[1])); } piles.delete(ev[1]); break;
     case 'emo': {
       const e = ents.get(ev[1]); if (!e) break;
       const s = textSprite(EMOTES[ev[2]], 48); s.position.y = 3.15;
-      e.c.g.remove(e.c.emo); e.c.emo = s; e.c.g.add(s); e.emoUntil = performance.now() + 2000;
+      e.c.g.remove(e.c.emo); disposeTree(e.c.emo); e.c.emo = s; e.c.g.add(s); e.emoUntil = performance.now() + 2000;
       e.c.peng?.setExpression(EMOTE_FACE[ev[2]], 2000);
       break;
     }
@@ -937,7 +1023,7 @@ function throwAt(p) {
   mySeqs.add(seq);
   send({ t: 'th', vx: v.vx, vy: v.vy, vz: v.vz, s: seq });
   // 서버 확인을 기다리지 않고 내 화면에 바로 띄움(예측). 서버가 같은 번호로 확인하면 그 눈덩이로 이어짐
-  balls.set(-seq, { mesh: add(scene, ballGeo, M.white), x: v.ox, y: v.oy, z: v.oz, vx: v.vx, vy: v.vy, vz: v.vz, age: 0, owner: myId, hand: true });
+  balls.set(-seq, { mesh: add(scene, ballGeo, ballM), x: v.ox, y: v.oy, z: v.oz, vx: v.vx, vy: v.vy, vz: v.vz, age: 0, owner: myId, hand: true });
   e.ammo--;
   lastThrowAt = e.throwT = now;
   sfx(520, 0.08, 0.1);
@@ -987,7 +1073,7 @@ renderer.setAnimationLoop(() => {
   const mine = ents.get(myId);
 
   // 내 이동 (클라이언트에서 계산, 서버에 위치 보고)
-  if (mine && spawned) {
+  if (mine && spawned && mapReady) {
     const kd = (...ks) => ks.some((k) => keys.has(k)) ? 1 : 0;
     // WASD·방향키·조이스틱: 카메라 기준 앞뒤·옆으로. 캐릭터는 가는 방향으로 부드럽게 돌아봄
     const f = kd('w', 'arrowup') - kd('s', 'arrowdown') - joy.y, s = kd('d', 'arrowright') - kd('a', 'arrowleft') + joy.x;
@@ -1000,17 +1086,28 @@ renderer.setAnimationLoop(() => {
     if (sp) camYaw -= joy.x * 0.3 * dt;
     if (Math.hypot(vx, vz) > 0.1) me.yaw += wrap(Math.atan2(vx, vz) - me.yaw) * Math.min(1, dt * 14);
     // 가속·감속: 속도가 목표로 부드럽게 따라감(눈밭 약 0.1초). 빙판은 아주 천천히(미끄러짐), 공중은 덜 바뀜
-    const onIce = map.ice && Math.hypot(me.x, me.z) < map.ice, airborne = me.y > H(me.x, me.z) + 0.05;
+    const onIce = map.onIce ? map.onIce(me.x, me.z) : map.ice && Math.hypot(me.x, me.z) < map.ice, airborne = me.y > H(me.x, me.z) + 0.05;
     const acc = Math.min(1, (onIce ? 2.6 : 16) * (airborne ? 0.35 : 1) * dt);
     me.mvx += (vx - me.mvx) * acc; me.mvz += (vz - me.mvz) * acc;
+    const px = me.x, pz = me.z;
     me.x = Math.max(-ARENA, Math.min(ARENA, me.x + (me.mvx + me.kx) * dt));
     me.z = Math.max(-ARENA, Math.min(ARENA, me.z + (me.mvz + me.kz) * dt));
-    [me.x, me.z] = pushOut(map, me.x, me.z); // 나무·바위·오두막을 뚫고 지나가지 않게
+    [me.x, me.z] = sweep(map, px, pz, me.x, me.z, me.y); // 나무·바위·오두막·얇은 벽을 뚫지 않게(서버와 같은 판정). 낮은 눈벽은 발이 꼭대기 위면 통과
     me.kx *= Math.exp(-5 * dt); me.kz *= Math.exp(-5 * dt);
-    const gy = H(me.x, me.z), grounded = me.y <= gy + 0.05;
-    me.vy += -24 * dt; me.y += me.vy * dt;
+    let gy = H(me.x, me.z); const grounded = me.y <= gy + 0.05;
+    me.vy += -GRAVITY * dt; me.y += me.vy * dt;
+    // 내리막 접지: 직전 프레임에 땅에 있었고 오르는 중이 아니면, 이번 수평 이동만큼의 내리막(경사 45°까지)은 땅을 따라감.
+    // 더 크게 꺼지면(절벽·턱) 그대로 떨어짐. 점프(위로)·맞고 튕김(vy>0)은 건드리지 않음
+    const step = Math.hypot(me.mvx + me.kx, me.mvz + me.kz) * dt;
+    if (me.onGround && me.vy <= 0 && me.y > gy && me.y - gy <= step + 0.02) me.y = gy;
+    // 수직 이동을 마친 최종 발 높이로 한 번 더: 눈벽 위에서 내려오면 옆으로 밀림(서버가 받는 위치와 같은 판정)
+    [me.x, me.z] = pushOut(map, me.x, me.z, 0.4, me.y); gy = H(me.x, me.z);
     if (me.y <= gy) { me.y = gy; me.vy = 0; }
-    if (jump && grounded && !mine.frozen) me.vy = 8;
+    me.onGround = me.y <= gy + 1e-3;
+    // 점프대: 입술 근처를 앞으로 달려 지나가면 튀어 오름(속도는 앞으로 가는 빠르기만큼, 서버도 같은 식으로 상한을 검사)
+    const ramp = me.onGround && !mine.frozen ? rampLaunch(map, me.x, me.z, me.mvx, me.mvz) : 0;
+    if (ramp) me.vy = ramp;
+    if (jump && grounded && !mine.frozen) me.vy = Math.max(JUMP_V, ramp);
     jump = false;
     Object.assign(mine, { x: me.x, y: me.y, z: me.z, yaw: me.yaw, spd: Math.hypot(me.mvx, me.mvz), gather: keys.has('f') });
     if (now - lastSend > 66) sendPos();
@@ -1049,18 +1146,22 @@ renderer.setAnimationLoop(() => {
     else if (b.y < H(b.x, b.z) || blocksBall(map, b.x, b.y, b.z)) { puff(b.x, b.y, b.z, 6); removeBall(id); } // 서버 확인 전에 내 화면에서 먼저 착지·충돌
     else if (b.age > 4) removeBall(id); // 서버도 4초 후 조용히 지움
   }
-  for (let i = parts.length - 1; i >= 0; i--) {
+  let pn = 0;
+  for (let i = 0; i < parts.length; i++) {
     const p = parts[i];
-    p.vy += G * dt; p.m.position.x += p.vx * dt; p.m.position.y += p.vy * dt; p.m.position.z += p.vz * dt;
-    p.life -= dt; p.m.scale.setScalar(Math.max(0.01, p.life / 0.6));
-    if (p.life <= 0) { scene.remove(p.m); parts.splice(i, 1); }
+    p.vy += G * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt; p.life -= dt;
+    if (p.life <= 0) continue;
+    partTmp.position.set(p.x, p.y, p.z); partTmp.scale.setScalar(p.life / 0.6); partTmp.updateMatrix();
+    partMesh.setMatrixAt(pn, partTmp.matrix); parts[pn++] = p;
   }
+  parts.length = pn; partMesh.count = pn; partMesh.instanceMatrix.needsUpdate = pn > 0;
   chairs.forEach((c, i) => {
     const u = (t * 0.02 + i / chairs.length) % 1, up = u < 0.5, v = up ? u * 2 : 2 - u * 2;
     const z = LIFT_Z0 + (LIFT_Z1 - LIFT_Z0) * v;
     c.position.set(LIFT_X + (up ? -1.3 : 1.3), liftY(z), z);
   });
 
+  updateEnvLights(dt, me.x, me.z);
   // 카메라: 3인칭. 방향(viewYaw)과 위치(camT)가 모두 부드럽게 따라옴 → 출발·멈춤·회전이 덜컥거리지 않음
   const ease = (r) => 1 - Math.exp(-dt * r);
   viewYaw += wrap(camYaw - viewYaw) * ease(11);
@@ -1083,6 +1184,6 @@ renderer.setAnimationLoop(() => {
   renderer.render(scene, camera);
   dbg?.frameEnd(now);
 });
-if (DEBUG) import('./debug.js').then((m) => { dbg = m.initDebug({ THREE, scene, renderer, ents, balls, send, puff, add, ballGeo, M, getMe: () => ents.get(myId), myId: () => myId, me }); });
+if (DEBUG) import('./debug.js').then((m) => { dbg = m.initDebug({ THREE, scene, renderer, ents, balls, send, puff, add, ballGeo, ballM, M, getMe: () => ents.get(myId), myId: () => myId, me, getMap: () => map, mapGroup: () => world, sun }); dbg.onMap?.(map); });
 </script>
 </html>

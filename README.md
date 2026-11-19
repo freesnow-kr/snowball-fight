@@ -44,12 +44,15 @@ DEV=1 LAG=80 deno run --allow-net --allow-read --allow-env server.ts    # 주고
 - 3번 맞으면 3초 동안 얼음에 갇힘. 같은 팀은 맞지 않음
 - 착지 원 근처에 거의 멈춘 상대가 있으면 조준 보정(원이 빨갛게)
 - 팀마다 최소 4명이 되도록 봇이 채움. 3분이 지나면 팀 점수로 승패
-- 맵: 슬로프, 숲속 공터, 꽁꽁 언 호수(빙판에서 미끄러짐). 맵마다 방이 따로
+- 맵: 슬로프, 숲속 공터, 꽁꽁 언 호수(빙판에서 미끄러짐) + Blender 맵 베이스 캠프, 슬로프 필드, 아이스 레이크(빙판), 포레스트 빌리지, 나이트 리조트. 맵마다 방이 따로
 
 ## 구조
 
 - `server.ts` — 방(맵)별 게임 상태, 명중 판정, 봇, 판 진행, WebSocket
 - `index.html` — 화면(three.js), 조작, 예측(내 눈덩이는 바로 보임)
-- `maps.js` — 지형 높이·장애물. 서버와 화면이 같은 파일을 써서 어긋나지 않음
+- `maps.js` — 지형 높이·장애물(원기둥 + 회전 상자). 서버와 화면이 같은 파일을 써서 어긋나지 않음
+- `maps_glb.js` — Blender 맵의 걸을 수 있는 높이(1m 격자)·장애물·스폰·조명 (생성 파일: `python3 SLOPE_SNOWFIGHT_MAPS/scripts/export_game_data.py`)
+- `mapglb.js` — Blender 맵 GLB 불러오기·캐싱, 반복 소품 InstancedMesh, 맵을 떠나면 GPU 해제
+- `SLOPE_SNOWFIGHT_MAPS/` — Blender 맵 원본·GLB·메타데이터·스크립트 (자세한 건 그 폴더 README)
 - `penguin.js` + `assets/penguin_blue.glb` — 펭귄 캐릭터(GLB 1개로 팀 색·표정 6종·동작 9종). 모델은 `blender/build_penguin.py` 로 다시 만듦, `blender/glb-check.html` 에서 검증·미리보기
 - `chars.js` — 예전 코드 펭귄(지금 게임에선 안 씀, `characters.html` 미리보기용)
