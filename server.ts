@@ -401,6 +401,32 @@ export function takeReport(body: any, ip: string, now = Date.now()): { ok: true;
   return { ok: true, line };
 }
 
+// 제보 → GitHub 이슈 제목·본문. 사용자 글은 코드 블록 안에 넣어 @멘션 알림·링크·마크다운이 동작하지 않게
+export function issueFrom(line: string) {
+  const r = JSON.parse(line), kind = r.kind ?? "버그";
+  const first = String(r.text).split("\n")[0].replace(/[@`]/g, "").slice(0, 60);
+  const fence = (t: string) => "```\n" + String(t ?? "").replace(/```/g, "ʼʼʼ") + "\n```";
+  return {
+    title: `[${kind}] ${first}`,
+    body: [`게임 안 🐞 제보 창에서 자동으로 등록된 이슈예요.`, "", "**내용**", fence(r.text), "",
+      "| 항목 | 값 |", "|---|---|",
+      ...[["시각", r.at], ["맵", r.map], ["화면", r.screen], ["제보자 이름", r.name]].map(([k, v]) => `| ${k} | ${String(v ?? "-").replace(/[|@`]/g, " ")} |`),
+      "", "<details><summary>브라우저</summary>", "", fence(r.ua), "</details>"].join("\n"),
+  };
+}
+// 환경변수 REPORT_GITHUB_TOKEN(이 저장소 Issues 쓰기 권한만 있는 토큰)이 있으면 이슈로 등록. 저장소는 REPORT_GITHUB_REPO(기본 freesnow-kr/snowball-fight)
+async function fileIssue(line: string) {
+  const token = Deno.env.get("REPORT_GITHUB_TOKEN");
+  if (!token) return;
+  const repo = Deno.env.get("REPORT_GITHUB_REPO") ?? "freesnow-kr/snowball-fight";
+  const res = await fetch(`https://api.github.com/repos/${repo}/issues`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}`, accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", "user-agent": "snowball-fight-server" },
+    body: JSON.stringify(issueFrom(line)),
+  });
+  if (!res.ok) console.error("[버그 제보] 이슈 등록 실패", res.status, (await res.text()).slice(0, 200));
+}
+
 // 정적 파일: 내용 해시를 ETag 로. 파일 이름이 고정이라 오래 캐시(immutable)하지 않고 매번 확인만 함(no-cache)
 // → 안 바뀌었으면 304(본문 없음)로 브라우저 캐시를 그대로 씀, 배포로 바뀌면 바로 새 파일
 const fileCache = new Map<string, { key: string; body: Uint8Array<ArrayBuffer>; etag: string }>();
@@ -442,6 +468,7 @@ if (import.meta.main) {
       const r = takeReport(body, ip);
       if (!r.ok) return new Response(null, { status: r.status });
       console.log("[버그 제보]", r.line);
+      fileIssue(r.line).catch((e) => console.error("[버그 제보] 이슈 등록 실패", e));
       const hook = Deno.env.get("REPORT_WEBHOOK");
       if (hook) fetch(hook, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ content: ("🐞 " + r.line).slice(0, 1900), text: "🐞 " + r.line }) }).catch(() => {});
       return new Response(null, { status: 204 });

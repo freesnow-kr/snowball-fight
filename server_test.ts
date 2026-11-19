@@ -1,6 +1,6 @@
 // deno test server_test.ts
 import { blocksBall, pushOut } from "./maps.js";
-import { BREAK_MS, createRoom, dev, handle, join, leave, pickRoom, rewindFor, round, ROUND_MS, rooms, takeReport, tick } from "./server.ts";
+import { BREAK_MS, createRoom, dev, handle, issueFrom, join, leave, pickRoom, rewindFor, round, ROUND_MS, rooms, takeReport, tick } from "./server.ts";
 import type { P, Room } from "./server.ts";
 
 const sock = { send() {} };
@@ -408,4 +408,13 @@ Deno.test("버그 제보: 글은 1000자까지 남고, 빈 글은 거절, 같은
   const r4 = takeReport({ text: "넷째" }, "1.1.1.1", 3000);
   assert(!r4.ok && r4.status === 429, "1분에 3건");
   assert(takeReport({ text: "1분 뒤" }, "1.1.1.1", 61_000).ok, "1분 지나면 다시");
+});
+
+Deno.test("제보 → GitHub 이슈: 제목은 [종류] 첫 줄, 사용자 글은 코드 블록(멘션·코드펜스 무력화)", () => {
+  const r = takeReport({ kind: "조작", text: "@octocat 점프대 이상해요\n```\n<script>", info: { map: "slope_field", name: "@bad|name" } }, "9.9.9.9", 0);
+  assert(r.ok, "제보");
+  const { title, body } = issueFrom((r as { line: string }).line);
+  assert(title === "[조작] octocat 점프대 이상해요", title);
+  assert(body.includes("```\n@octocat 점프대 이상해요\nʼʼʼ\n<script>\n```"), "본문 코드 블록");
+  assert(!/\| @/.test(body) && body.includes("| 맵 | slope_field |") && body.includes(" bad name"), "표 칸에 @·| 없음");
 });
