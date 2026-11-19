@@ -37,12 +37,13 @@ wj('colliders.json', {
     'boundary': {'shape': 'ring_wall', 'center': [0, 0], 'inner_radius': RING_R, 'note': f'{sum(o["prop"] == "snow_wall_high" and o["name"].startswith("ring_wall") for o in obs)} snow_wall_high boxes (2.2 m, cannot be jumped) overlapping into a closed ring; server also clamps x,z to ±50'},
     'colliders': [{'name': o['name'], 'kind': o['prop'], 'position': o['position'], 'rotation_y': o['rotation_y'], 'scale': o['scale'], 'hop': o['prop'] in HOP, **o['collider']} for o in obs],
 })
-# 5) 스폰 8곳: 링 안쪽 r 25, 가운데를 바라봄
+# 5) 스폰 12곳(개인전 최대 12명): 링 안쪽 r 25·30° 간격, 가운데를 바라봄
+MAX = 12
 sp = [{'id': i, 'x': round(p[0], 2), 'y': round(p[1], 2), 'z': round(p[2], 2), 'yaw': round(math.atan2(-p[0], -p[2]), 4)} for i, p in enumerate(meta['spawns']['ffa'])]
-wj('spawn_points.json', {'map': MID, 'mode': 'snow_brawl', 'max_players': 8, 'yaw_note': 'yaw = atan2(dx, dz) facing the arena centre (game convention)', 'spawns': sp})
+wj('spawn_points.json', {'map': MID, 'mode': 'snow_brawl', 'max_players': MAX, 'yaw_note': 'yaw = atan2(dx, dz) facing the arena centre (game convention)', 'spawns': sp})
 # 6) 설정
 wj('map_config.json', {
-    'id': MID, 'name': 'Snow Brawl Arena', 'mode': 'snow_brawl', 'max_players': 8,
+    'id': MID, 'name': 'Snow Brawl Arena', 'mode': 'snow_brawl', 'max_players': MAX,
     'size_m': [60, 60], 'play_area': {'shape': 'circle', 'center': [0, 0], 'radius': RING_R},
     'world_bounds': {'x': [-50, 50], 'z': [-50, 50], 'note': 'terrain mesh is 100×100 m; outside the ring is scenery (berm + backdrop hills)'},
     'coordinates': meta['coordinates'], 'units': 'meters (penguin 2 m tall)', 'origin': [0, 0, 0], 'up': '+Y',
@@ -70,7 +71,7 @@ def clear(x, z, o):
 mins = [min(clear(s['x'], s['z'], o) for o in obs) for s in sp]
 gaps = [math.hypot(a['x'] - b['x'], a['z'] - b['z']) for i, a in enumerate(sp) for b in sp[i + 1:]]
 R['spawns'] = {'count': len(sp), 'min_clearance_m': round(min(mins), 2), 'min_gap_m': round(min(gaps), 2), 'max_r': round(max(math.hypot(s['x'], s['z']) for s in sp), 2),
-               'result': 'PASS' if len(sp) == 8 and min(mins) >= 2.5 and min(gaps) >= 3 and max(math.hypot(s['x'], s['z']) for s in sp) < RING_R - 1 else 'FAIL'}
+               'result': 'PASS' if len(sp) == MAX and min(mins) >= 2.5 and min(gaps) >= 3 and max(math.hypot(s['x'], s['z']) for s in sp) < RING_R - 1 else 'FAIL'}
 R['inner_slope_max_deg'] = max(slope[r][c] for r in range(N) for c in range(N) if math.hypot(c - 50, r - 50) < RING_R - 1)
 # GLB 다시 불러오기: 메시·재질, 지형 정점 높이 ↔ 높이 격자
 bpy.ops.wm.read_factory_settings(use_empty=True)

@@ -37,8 +37,9 @@ export const mapById = (id) => MAPS.find((m) => m.id === id) ?? MAPS[0];
 // ── SNOW BRAWL(개인전): 이 모드 맵의 방은 팀이 없고 사람마다 색이 하나(team = 2 + 색 번호). 눈덩이 던지기·모으기 없음, 공격은 싸다구와 굴린 눈만.
 // 굴린 눈: R 꾹(기존 굴리기로 눈을 키움) → 떼면 앞으로 굴러감. 초속 9m·최대 13m, 땅 높이를 따라가고 장애물·경계에 부딪히면 부서짐.
 // 맞히면 2점(싸다구 1점), 체력 -1. 한 덩이는 한 명만. 다음 굴리기는 떼고 2초 뒤부터. 점수가 같으면 공동 순위(팀전의 무승부와 같은 기준)
-export const BRAWL = { max: 8, colors: ['#FF6478', '#FFAD54', '#F4D65D', '#63D69A', '#64C8F2', '#648FFF', '#AD83EF', '#F18DCE'],
-  names: ['빨강', '주황', '노랑', '초록', '하늘', '파랑', '보라', '분홍'], rollCd: 2000, rollV: 9, rollRange: 13, rollPts: 2, slapPts: 1 };
+// 색 12개 = 최대 12명(색을 더하면 max 도 같이). 검정은 머리와 구분되게 순검정에 가깝게, 흰색은 눈 위에서 음영으로 보임(화면 확인함)
+export const BRAWL = { max: 12, colors: ['#FF6478', '#FFAD54', '#F4D65D', '#63D69A', '#64C8F2', '#648FFF', '#AD83EF', '#F18DCE', '#B8E05C', '#B5835A', '#22252C', '#F5F7FA'],
+  names: ['빨강', '주황', '노랑', '초록', '하늘', '파랑', '보라', '분홍', '라임', '갈색', '검정', '흰색'], rollCd: 2000, rollV: 9, rollRange: 13, rollPts: 2, slapPts: 1 };
 export const isBrawl = (m) => m?.mode === 'brawl';
 // 굴린 눈 한 걸음(서버·화면 공통). b = { x, z, dx, dz, r, d(지금까지 간 거리) }. 'wall' | 'far' | null
 export function rollStep(m, b, dt) {
