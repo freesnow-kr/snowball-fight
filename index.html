@@ -90,7 +90,8 @@
   /* 좌우 바꾸기: 조이스틱 오른쪽, 버튼 왼쪽 */
   #topBtns { position: fixed; left: calc(12px + env(safe-area-inset-left)); top: calc(66px + env(safe-area-inset-top)); }
   #topBtns { display: flex; gap: 6px; flex-wrap: wrap; max-width: calc(100vw - 24px); }
-  body:not(.touch) #topBtns { top: calc(96px + env(safe-area-inset-top)); } /* PC HUD 3줄(싸다구·슬라이딩 쿨다운) 아래 */
+  body:not(.touch) #topBtns { top: calc(96px + env(safe-area-inset-top)); }
+  @media (orientation: landscape) { .touch #topBtns { max-width: calc(100vw - 270px); } } /* 폰 가로: 오른쪽 순위표 앞에서 줄바꿈 */ /* PC HUD 3줄(싸다구·슬라이딩 쿨다운) 아래 */
   #topBtns button { border: 0; border-radius: 16px; padding: 6px 10px; background: #ffffffbb; font-size: 13px; font-weight: 700; color: #123; cursor: pointer; }
   /* 후원 창: "펭귄들을 지켜주세요" — 눈밭이 녹는 게이지 */
   #coffee { position: fixed; inset: 0; display: none; place-items: center; background: #0b2a4a99; z-index: 30; padding: 16px; }
@@ -111,13 +112,22 @@
   #coffee small { display: block; margin-top: 12px; font-size: 12px; color: #789; }
   #coffeeClose { position: absolute; right: 10px; top: 10px; width: 40px; height: 40px; border-radius: 50%; border: 0; background: #fff; font-size: 18px; color: #345; cursor: pointer; z-index: 1; }
   /* 버그 제보 창 */
-  #howto, #bug { position: fixed; inset: 0; display: none; place-items: center; background: #0b2a4a99; z-index: 30; padding: 16px; }
-  #howto.open, #bug.open { display: grid; }
-  #howto .card, #bug form { position: relative; width: min(380px, 100%); box-sizing: border-box; display: grid; gap: 10px; background: #f7fbff; color: #123;
+  #camSet, #howto, #bug { position: fixed; inset: 0; display: none; place-items: center; background: #0b2a4a99; z-index: 30; padding: 16px; }
+  #camSet.open, #howto.open, #bug.open { display: grid; }
+  #camSet .card, #howto .card, #bug form { position: relative; width: min(380px, 100%); box-sizing: border-box; display: grid; gap: 10px; background: #f7fbff; color: #123;
     border-radius: 20px; padding: 22px 18px 16px; box-shadow: 0 10px 30px #0005; border: 3px solid #fff; }
   #bug h3, #howto h3 { margin: 0; font-size: 20px; }
   #howto .card { width: min(440px, 100%); max-height: calc(100dvh - 32px); overflow-y: auto; }
   #howto table { border-collapse: collapse; font-size: 14px; }
+  #camSet h3 { margin: 0; font-size: 20px; }
+  #camSet .opt { display: grid; gap: 6px; font-size: 14px; font-weight: 800; }
+  #camSet .seg { display: flex; gap: 6px; } #camSet .seg label { flex: 1; } #camSet .seg input { position: absolute; opacity: 0; }
+  #camSet .seg span { display: block; text-align: center; padding: 9px 4px; border-radius: 10px; background: #e3ecf5; font-size: 13px; cursor: pointer; }
+  #camSet .seg input:checked + span { background: #2f6fd0; color: #fff; }
+  #camSet .seg input:disabled + span { opacity: 0.45; }
+  #camSet input[type=range] { width: 100%; accent-color: #2f6fd0; }
+  #camSet small { font-weight: 400; color: #678; }
+  #camSet .reset { min-height: 40px; border: 0; border-radius: 12px; background: #e3ecf5; color: #234; font: 700 14px system-ui, sans-serif; cursor: pointer; }
   #howto td { padding: 7px 4px; border-top: 1px solid #e3ecf5; vertical-align: top; line-height: 1.4; }
   #howto td:first-child { font-weight: 800; white-space: nowrap; padding-right: 12px; }
   #howto kbd { display: inline-block; min-width: 1.4em; text-align: center; padding: 0 5px; border-radius: 6px; background: #e3ecf5; border-bottom: 2px solid #c3d2e2; font: 700 13px system-ui, sans-serif; }
@@ -134,7 +144,7 @@
   #bug .row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #789; }
   #bug button[type=submit] { min-height: 46px; border: 0; border-radius: 12px; background: #2f6fd0; color: #fff; font: 800 16px system-ui, sans-serif; cursor: pointer; }
   #bug button[type=submit]:disabled { opacity: 0.5; }
-  #howtoClose, #bugClose { position: absolute; right: 10px; top: 10px; width: 40px; height: 40px; border-radius: 50%; border: 0; background: #e3ecf5; font-size: 18px; color: #345; cursor: pointer; }
+  #camSetClose, #howtoClose, #bugClose { position: absolute; right: 10px; top: 10px; width: 40px; height: 40px; border-radius: 50%; border: 0; background: #e3ecf5; font-size: 18px; color: #345; cursor: pointer; }
   #bugMsg { min-height: 1.2em; font-size: 13px; font-weight: 700; color: #2f6fd0; }
   #start #coffeeStart { background: transparent; color: #ffe08a; font-weight: 700; font-size: 14px; padding: 4px; }
   body:not(.touch) #swap { display: none; } /* 조이스틱 좌우 바꾸기는 폰만 */
@@ -308,7 +318,19 @@ window.LOAD = (() => {
   </div>
   <div id="emoBar"></div>
 </div>
-<div id="topBtns"><button id="mapBtn"></button><button id="coffeeBtn">🐧 지켜주기</button><button id="bugBtn">🐞 제보</button><button id="howtoBtn"></button><button id="swap">⇄ 조이스틱 좌우</button></div>
+<div id="topBtns"><button id="mapBtn"></button><button id="coffeeBtn">🐧 지켜주기</button><button id="bugBtn">🐞 제보</button><button id="howtoBtn"></button><button id="camBtn">⚙️ 카메라</button><button id="swap">⇄ 조이스틱 좌우</button></div>
+<div id="camSet"><div class="card">
+  <button id="camSetClose" type="button" aria-label="닫기">✕</button>
+  <h3>⚙️ 카메라 설정</h3>
+  <div class="opt">자동 카메라 추적 <small>달리는 방향으로 카메라가 천천히 따라 돌아요. 옆걸음·뒷걸음엔 안 돌아요</small>
+    <div class="seg"><label><input type="radio" name="camAuto" value="on"><span>켜기</span></label><label><input type="radio" name="camAuto" value="off"><span>끄기</span></label></div></div>
+  <div class="opt">자동 추적 강도
+    <div class="seg"><label><input type="radio" name="camStrength" value="low"><span>낮음</span></label><label><input type="radio" name="camStrength" value="mid"><span>보통</span></label><label><input type="radio" name="camStrength" value="high"><span>높음</span></label></div></div>
+  <div class="opt">카메라 거리
+    <div class="seg"><label><input type="radio" name="camDistP" value="near"><span>가까움</span></label><label><input type="radio" name="camDistP" value="mid"><span>기본</span></label><label><input type="radio" name="camDistP" value="far"><span>멀리</span></label></div></div>
+  <div class="opt"><span>수동 회전 감도 <small id="camSensV"></small></span><input id="camSens" type="range" min="0.3" max="2" step="0.1"></div>
+  <button type="button" class="reset" id="camReset">기본값으로</button>
+</div></div>
 <div id="howto"><div class="card">
   <button id="howtoClose" type="button" aria-label="닫기">✕</button>
   <h3>🎮 사용법</h3>
@@ -323,6 +345,7 @@ window.LOAD = (() => {
     <tr><td>굴려서 놓기</td><td><kbd>R</kbd> 꾹 → 떼기 (3단이면 눈사람)</td></tr>
     <tr><td>이모트 · 맵</td><td><kbd>1</kbd>~<kbd>6</kbd> · <kbd>M</kbd></td></tr>
     <tr><td>사용법</td><td><kbd>H</kbd></td></tr>
+    <tr><td>카메라 설정</td><td>위 ⚙️ 카메라 버튼: 자동 추적·강도·거리·회전 감도</td></tr>
     <tr><td>🥊 SNOW BRAWL</td><td>개인전: 던지기 대신 <kbd>R</kbd> 꾹 → 떼면 눈이 굴러가요(2점, 쿨다운 2초). 굴리는 중 눈덩이로 밀어 닿아도 2점 · 싸다구 1점</td></tr>
   </table>
   <table class="mo">
@@ -378,7 +401,7 @@ window.LOAD = (() => {
 <script type="module" onerror="LOAD.fail('engine')">
 import * as THREE from 'three';
 import { loadPenguin, Penguin } from './penguin.js';
-import { blocksBall, BRAWL, canStand, GRAVITY, hitsPenguin, iceAt, isBrawl, JUMP_V, MAPS, mapById, pushOut, rampLaunch, rollStep, SLAP, SLIDE, slideMove, slideNose, slideOver, sweep } from './maps.js';
+import { blocksBall, BRAWL, canStand, GRAVITY, hitsPenguin, iceAt, isBrawl, JUMP_V, MAPS, mapById, pushOut, rampLaunch, rollStep, SLAP, SLIDE, slideMove, slideNose, slideOver, sweep, toLocal } from './maps.js';
 import { loadMap, releaseGPU } from './mapglb.js';
 LOAD.step('engine', 1); // three.js·게임 코드를 다 받아 실행 시작
 
@@ -657,7 +680,7 @@ const piles = new Map(); // id -> Group
 const parts = [];
 const me = { x: 0, y: 0, z: 30, yaw: Math.PI, vy: 0, kx: 0, kz: 0, mvx: 0, mvz: 0, // mvx·mvz: 가속·감속이 붙은 실제 이동 속도
   slide: null, slideAt: -1e9, slapAt: -1e9, stunUntil: 0, rollAt: -1e9 }; // rollAt: 개인전 굴린 눈 보낸 시각(쿨다운) // 배 슬라이딩 상태 { v, yaw, t }·마지막 시작 시각(쿨다운), 싸다구 맞은 경직 끝
-let myId = 0, roundBreak = false, bannerUntil = 0, spawned = false, camYaw = Math.PI, viewYaw = Math.PI, camDist = 7.5, pitch = 0.36, jump = false, shake = 0, lastSend = 0, lastSent = '', flashUntil = 0, flashText = '';
+let myId = 0, roundBreak = false, bannerUntil = 0, spawned = false, camYaw = Math.PI, viewYaw = Math.PI, camDist = 7.5, pitch = 0.36, lastManual = -1e9, jump = false, shake = 0, lastSend = 0, lastSent = '', flashUntil = 0, flashText = '';
 const keys = new Set();
 
 function addEnt(id, name, team, bot) {
@@ -1138,7 +1161,7 @@ function release(k) {
 // 8px 넘게 움직이면 끌기로 본다(던지지 않음). 마우스 잠금은 쓰지 않음
 const cv = renderer.domElement, ptrs = new Map();
 let pinch = 0;
-const look = (dx, dy, s) => { camYaw -= dx * s; pitch = Math.max(-0.3, Math.min(1.1, pitch + dy * s)); };
+const look = (dx, dy, s) => { s *= cam.sens; camYaw -= dx * s; pitch = Math.max(-0.3, Math.min(1.1, pitch + dy * s)); lastManual = performance.now(); }; // 수동 조작이 자동 추적보다 우선
 const zoom = (k) => { camDist = Math.max(3.5, Math.min(14, camDist * k)); };
 cv.addEventListener('contextmenu', (e) => e.preventDefault());
 cv.addEventListener('pointerdown', (e) => {
@@ -1170,7 +1193,7 @@ cv.addEventListener('wheel', (e) => {
   e.preventDefault();
   const mouseWheel = e.deltaMode !== 0 || (e.deltaX === 0 && Number.isInteger(e.deltaY) && Math.abs(e.deltaY) >= 40);
   if (e.ctrlKey || mouseWheel) zoom(1 + e.deltaY * (e.ctrlKey ? 0.01 : 0.001));
-  else { camYaw += e.deltaX * 0.005; pitch = Math.max(-0.3, Math.min(1.1, pitch - e.deltaY * 0.003)); }
+  else look(-e.deltaX, -e.deltaY * 0.6, 0.005);
 }, { passive: false });
 
 // 모바일: 조이스틱
@@ -1220,12 +1243,12 @@ $('swap').addEventListener('pointerdown', (e) => {
 const keyOf = (e) => e.code.startsWith('Key') ? e.code.slice(3).toLowerCase()
   : e.code === 'Space' ? ' ' : e.code.startsWith('Shift') ? 'shift' : e.key.toLowerCase();
 addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') bug(false);
+  if (e.key === 'Escape') { bug(false); camSetOpen(false); } // 설정 창의 슬라이더·버튼에 커서가 있어도 Esc 로 닫힘
   if (/^(INPUT|TEXTAREA)$/.test(e.target.tagName) || e.repeat) return; // 글 쓰는 중엔 게임 조작 안 함
   const k = keyOf(e);
   if (k === 'm' && hello) return toggleMapMenu();
   if (k === 'h' && hello) return howto();
-  if (k === 'escape') { toggleMapMenu(false); coffee(false); howto(false); }
+  if (k === 'escape') { toggleMapMenu(false); coffee(false); howto(false); camSetOpen(false); }
   press(k);
   if (k === ' ' || k.startsWith('arrow')) e.preventDefault();
   if (/^Digit[1-6]$/.test(e.code)) send({ t: 'emo', e: +e.code.slice(5) - 1 });
@@ -1369,6 +1392,70 @@ function sendPos() {
 // ---------- 루프 ----------
 const clock = new THREE.Clock(), camT = new THREE.Vector3();
 const wrap = (a) => ((a + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+// ---------- 카메라 자동 추적 ----------
+// 이동은 카메라 기준(W = 카메라 앞)이라 카메라가 따라 돌면 입력 방향도 같이 돈다 →
+// 앞쪽(±60°)으로 갈 때만 따라 돌고 80° 넘는 옆걸음·뒷걸음은 안 돎(돌면 빙빙 돎). 대각선을 계속 누르면 크게 호를 그리며 돎
+// delay: 한 방향으로 이만큼 움직여야 시작(초), dead: 이보다 작은 차이는 무시, full/zero: 이 각도까지 최대 속도 → 이 각도에서 0(rad)
+// resume: 마지막 수동 조작 뒤 기다리는 시간(ms), fade: 다시 시작할 때 서서히(ms), la/laSlide: 앞쪽 보기 최대 거리(m)
+const CAM_TUNE = { delay: 0.35, dead: 0.1, full: 1.05, zero: 1.4, resume: 2000, fade: 700, la: 1.6, laSlide: 2.4 };
+const CAM_RATE = { low: 0.6, mid: 1.1, high: 1.8 }; // 최대 자동 회전 속도(rad/s): 약 34° / 63° / 103° 초당
+const CAM_DIST = { near: 6, mid: 7.5, far: 9.5 };
+const camLA = new THREE.Vector3(), camTmp = new THREE.Vector3(), camRay = new THREE.Vector3();
+let camMoveT = 0, distK = 1, camHit = 99;
+function autoCam(dt, now) {
+  const spd = Math.hypot(me.mvx, me.mvz), mine = ents.get(myId);
+  const rel = wrap((me.slide ? me.slide.yaw : Math.atan2(me.mvx, me.mvz)) - camYaw), a = Math.abs(rel);
+  camMoveT = spd > 2 && a < CAM_TUNE.zero && !mine?.frozen ? camMoveT + dt : 0; // 앞쪽으로 계속 움직인 시간
+  if (!cam.auto || camMoveT < CAM_TUNE.delay || a < CAM_TUNE.dead) return;
+  if (now - me.slapAt < 600 || now < me.stunUntil) return; // 싸다구·맞고 휘청일 땐 카메라 고정(급회전 방지)
+  const since = now - lastManual - CAM_TUNE.resume;
+  if (since < 0) return; // 수동 조작 우선: 2초 기다림
+  const w = Math.min(1, (CAM_TUNE.zero - a) / (CAM_TUNE.zero - CAM_TUNE.full)) // 앞쪽 60° 까지 1 → 80° 에서 0
+    * Math.min(1, since / CAM_TUNE.fade)                                         // 재개는 서서히
+    * Math.min(1.3, Math.max(0.5, spd / 7.2))                                   // 빠를수록 조금 더(배 슬라이딩 포함)
+    * (mine?.roll ? 0.6 : 1);                                                    // 눈 굴리며 조준할 땐 덜(시야 유지)
+  camYaw += Math.sign(rel) * Math.min(a - CAM_TUNE.dead, CAM_RATE[cam.strength] * w * dt); // 프레임 독립·최대 속도 제한
+}
+// 카메라 뒤쪽이 장애물(나무·벽·오두막)에 가리면 그 앞까지만. 지형은 아래(높이 보정)에서
+function camFree(t, dx, dy, dz, want) {
+  for (let d = 0.4; d < want; d += 0.3) {
+    const x = t.x + dx * d, y = t.y + dy * d, z = t.z + dz * d;
+    for (const o of map.obstacles) {
+      if (y > o.y + o.top + 0.2) continue;
+      const r = Math.max(o.body ?? 0, o.ball ?? 0) + 0.25;
+      if (o.hw !== undefined) { const [lx, lz] = toLocal(o, x, z); if (Math.abs(lx) < o.hw + 0.25 && Math.abs(lz) < o.hd + 0.25) return Math.max(0.6, d - 0.35); }
+      else if (Math.hypot(x - o.x, z - o.z) < r) return Math.max(0.6, d - 0.35); // 바짝 붙어 서도 가지 안으로 안 들어가게(최소 0.6m)
+    }
+  }
+  return 99;
+}
+// ---------- 카메라 설정(⚙️): 이 기기에만 저장 ----------
+const CAM_DEF = { auto: true, strength: 'mid', dist: 'mid', sens: 1 };
+const cam = (() => { try { return { ...CAM_DEF, ...JSON.parse(localStorage.cam ?? '{}') }; } catch { return { ...CAM_DEF }; } })();
+camDist = CAM_DIST[cam.dist] ?? 7.5;
+function camUI() {
+  for (const [n, v] of [['camAuto', cam.auto ? 'on' : 'off'], ['camStrength', cam.strength], ['camDistP', cam.dist]])
+    for (const i of document.querySelectorAll(`input[name=${n}]`)) i.checked = i.value === v;
+  for (const i of document.querySelectorAll('input[name=camStrength]')) i.disabled = !cam.auto;
+  $('camSens').value = cam.sens; $('camSensV').textContent = `${cam.sens.toFixed(1)}배`;
+}
+function camSave(patch) {
+  Object.assign(cam, patch);
+  if ('dist' in patch) camDist = CAM_DIST[cam.dist];
+  localStorage.cam = JSON.stringify(cam); camUI();
+}
+$('camSet').addEventListener('change', (e) => {
+  const t = e.target;
+  if (t.name === 'camAuto') camSave({ auto: t.value === 'on' });
+  if (t.name === 'camStrength') camSave({ strength: t.value });
+  if (t.name === 'camDistP') camSave({ dist: t.value });
+});
+$('camSens').addEventListener('input', (e) => camSave({ sens: Number(e.target.value) }));
+$('camReset').onclick = () => camSave({ ...CAM_DEF });
+const camSetOpen = (open) => { $('camSet').classList.toggle('open', open); if (open) { camUI(); for (const k of [...keys]) release(k); } };
+$('camBtn').onclick = () => camSetOpen(true);
+$('camSetClose').onclick = () => camSetOpen(false);
+$('camSet').addEventListener('pointerdown', (e) => { if (e.target.id === 'camSet') camSetOpen(false); });
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05), now = performance.now(), t = now / 1000;
   dbg?.frameStart(now);
@@ -1384,8 +1471,6 @@ renderer.setAnimationLoop(() => {
     const sp = mine.frozen || keys.has('f') || now < me.stunUntil ? 0 : (run ? 7.2 : 4.4) * (mine.roll ? 0.6 : 1); // 싸다구 맞으면 0.3초 경직
     const fx = Math.sin(camYaw), fz = Math.cos(camYaw);
     const vx = (fx * f - fz * s) / len * sp, vz = (fz * f + fx * s) / len * sp;
-    // 모바일: 조이스틱을 옆으로 밀면 시야도 그쪽으로 천천히 돔 (최대 초당 약 17°, 살짝만). PC 키보드는 그대로
-    if (sp) camYaw -= joy.x * 0.3 * dt;
     if (me.slide) { // 배 슬라이딩: 속도·조향·충돌은 서버와 같은 함수(maps.js slideMove). 입력 방향으로 조금씩만 꺾임
       [me.x, me.z] = slideMove(map, me.slide, me.x, me.z, me.y, Math.hypot(vx, vz) > 0.1 ? Math.atan2(vx, vz) : null, dt);
       me.yaw = me.slide.yaw; me.mvx = Math.sin(me.yaw) * me.slide.v; me.mvz = Math.cos(me.yaw) * me.slide.v; me.kx = me.kz = 0;
@@ -1510,14 +1595,25 @@ renderer.setAnimationLoop(() => {
 
   updateEnvLights(dt, me.x, me.z);
   // 카메라: 3인칭. 방향(viewYaw)과 위치(camT)가 모두 부드럽게 따라옴 → 출발·멈춤·회전이 덜컥거리지 않음
+  // + 자동 추적(camYaw 를 달리는 방향으로), 앞쪽 보기(look-ahead), 속도에 따라 살짝 멀어짐, 장애물에 안 박힘. 모두 화면 전용
   const ease = (r) => 1 - Math.exp(-dt * r);
+  if (spawned) autoCam(dt, now);
   viewYaw += wrap(camYaw - viewYaw) * ease(11);
-  camT.lerp(tmp.set(me.x, me.y + 1.6, me.z), ease(10));
-  shake = Math.max(0, shake - dt);
+  const spdC = Math.hypot(me.mvx, me.mvz), laMax = me.slide ? CAM_TUNE.laSlide : CAM_TUNE.la;
+  const close = isBrawl(map) && enemies().some((e) => Math.hypot(e.x - me.x, e.z - me.z) < 8) ? 0.4 : 1; // 근처 상대가 화면 밖으로 안 밀리게
+  const laK = spdC > 0.3 ? Math.min(1, spdC / 7.2) * laMax * close / spdC : 0;
+  camLA.lerp(camTmp.set(me.mvx * laK, 0, me.mvz * laK), ease(3)); // 멈추면 천천히 0 으로(기본 구도)
+  camT.lerp(tmp.set(me.x + camLA.x, me.y + 1.6, me.z + camLA.z), ease(10));
+  distK += ((me.slide ? 1.25 : spdC > 5.5 ? 1.12 : 1) - distK) * ease(2); // 달리기 +12%, 배 슬라이딩 +25%
+  shake = Math.min(0.25, Math.max(0, shake - dt)); // 맞을 때 흔들림 상한(멀미 방지)
+  const cdx = -Math.sin(viewYaw) * Math.cos(pitch), cdy = Math.sin(pitch), cdz = -Math.cos(viewYaw) * Math.cos(pitch);
+  const want = camDist * distK, free = camFree(camT, cdx, cdy, cdz, want);
+  camHit += (free - camHit) * (free < camHit ? ease(25) : ease(3)); // 가려지면 바로 당기고, 비면 천천히 물러남
+  const cd = Math.min(want, camHit);
   camera.position.set(
-    camT.x - Math.sin(viewYaw) * Math.cos(pitch) * camDist + (Math.random() - 0.5) * shake,
-    camT.y + Math.sin(pitch) * camDist + (Math.random() - 0.5) * shake,
-    camT.z - Math.cos(viewYaw) * Math.cos(pitch) * camDist,
+    camT.x + cdx * cd + (Math.random() - 0.5) * shake,
+    camT.y + cdy * cd + (Math.random() - 0.5) * shake,
+    camT.z + cdz * cd,
   );
   camera.position.y = Math.max(camera.position.y, H(camera.position.x, camera.position.z) + 0.5);
   // 캐릭터보다 3m 앞을 바라봐서 캐릭터는 화면 아래쪽, 가운데는 앞쪽 눈밭이 보이게
@@ -1539,6 +1635,6 @@ renderer.setAnimationLoop(() => {
   renderer.render(scene, camera);
   dbg?.frameEnd(now);
 });
-if (DEBUG) import('./debug.js').then((m) => { dbg = m.initDebug({ THREE, scene, renderer, ents, balls, send, puff, add, ballGeo, ballM, M, getMe: () => ents.get(myId), myId: () => myId, me, getMap: () => map, mapGroup: () => world, sun }); dbg.onMap?.(map); });
+if (DEBUG) import('./debug.js').then((m) => { dbg = m.initDebug({ THREE, scene, renderer, ents, balls, send, puff, add, ballGeo, ballM, M, getMe: () => ents.get(myId), myId: () => myId, me, getMap: () => map, mapGroup: () => world, sun, getCam: () => ({ camYaw, viewYaw, camDist, distK, camHit, la: camLA.toArray(), camT: camT.toArray(), pos: camera.position.toArray(), cam: { ...cam }, lastManual }) }); dbg.onMap?.(map); });
 </script>
 </html>
