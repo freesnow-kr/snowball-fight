@@ -1401,7 +1401,7 @@ const CAM_TUNE = { delay: 0.35, dead: 0.1, full: 1.05, zero: 1.4, resume: 2000, 
 const CAM_RATE = { low: 0.6, mid: 1.1, high: 1.8 }; // 최대 자동 회전 속도(rad/s): 약 34° / 63° / 103° 초당
 const CAM_DIST = { near: 6, mid: 7.5, far: 9.5 };
 const camLA = new THREE.Vector3(), camTmp = new THREE.Vector3(), camRay = new THREE.Vector3();
-let camMoveT = 0, distK = 1, camHit = 99;
+let camMoveT = 0, camHit = 99;
 function autoCam(dt, now) {
   const spd = Math.hypot(me.mvx, me.mvz), mine = ents.get(myId);
   const rel = wrap((me.slide ? me.slide.yaw : Math.atan2(me.mvx, me.mvz)) - camYaw), a = Math.abs(rel);
@@ -1595,7 +1595,7 @@ renderer.setAnimationLoop(() => {
 
   updateEnvLights(dt, me.x, me.z);
   // 카메라: 3인칭. 방향(viewYaw)과 위치(camT)가 모두 부드럽게 따라옴 → 출발·멈춤·회전이 덜컥거리지 않음
-  // + 자동 추적(camYaw 를 달리는 방향으로), 앞쪽 보기(look-ahead), 속도에 따라 살짝 멀어짐, 장애물에 안 박힘. 모두 화면 전용
+  // + 자동 추적(camYaw 를 달리는 방향으로), 앞쪽 보기(look-ahead), 장애물에 안 박힘. 모두 화면 전용. 속도에 따른 확대·축소는 없음(거리는 설정값 그대로)
   const ease = (r) => 1 - Math.exp(-dt * r);
   if (spawned) autoCam(dt, now);
   viewYaw += wrap(camYaw - viewYaw) * ease(11);
@@ -1604,10 +1604,9 @@ renderer.setAnimationLoop(() => {
   const laK = spdC > 0.3 ? Math.min(1, spdC / 7.2) * laMax * close / spdC : 0;
   camLA.lerp(camTmp.set(me.mvx * laK, 0, me.mvz * laK), ease(3)); // 멈추면 천천히 0 으로(기본 구도)
   camT.lerp(tmp.set(me.x + camLA.x, me.y + 1.6, me.z + camLA.z), ease(10));
-  distK += ((me.slide ? 1.25 : spdC > 5.5 ? 1.12 : 1) - distK) * ease(2); // 달리기 +12%, 배 슬라이딩 +25%
   shake = Math.min(0.25, Math.max(0, shake - dt)); // 맞을 때 흔들림 상한(멀미 방지)
   const cdx = -Math.sin(viewYaw) * Math.cos(pitch), cdy = Math.sin(pitch), cdz = -Math.cos(viewYaw) * Math.cos(pitch);
-  const want = camDist * distK, free = camFree(camT, cdx, cdy, cdz, want);
+  const want = camDist, free = camFree(camT, cdx, cdy, cdz, want);
   camHit += (free - camHit) * (free < camHit ? ease(25) : ease(3)); // 가려지면 바로 당기고, 비면 천천히 물러남
   const cd = Math.min(want, camHit);
   camera.position.set(
@@ -1635,6 +1634,6 @@ renderer.setAnimationLoop(() => {
   renderer.render(scene, camera);
   dbg?.frameEnd(now);
 });
-if (DEBUG) import('./debug.js').then((m) => { dbg = m.initDebug({ THREE, scene, renderer, ents, balls, send, puff, add, ballGeo, ballM, M, getMe: () => ents.get(myId), myId: () => myId, me, getMap: () => map, mapGroup: () => world, sun, getCam: () => ({ camYaw, viewYaw, camDist, distK, camHit, la: camLA.toArray(), camT: camT.toArray(), pos: camera.position.toArray(), cam: { ...cam }, lastManual }) }); dbg.onMap?.(map); });
+if (DEBUG) import('./debug.js').then((m) => { dbg = m.initDebug({ THREE, scene, renderer, ents, balls, send, puff, add, ballGeo, ballM, M, getMe: () => ents.get(myId), myId: () => myId, me, getMap: () => map, mapGroup: () => world, sun, getCam: () => ({ camYaw, viewYaw, camDist, distK: 1, camHit, la: camLA.toArray(), camT: camT.toArray(), pos: camera.position.toArray(), cam: { ...cam }, lastManual }) }); dbg.onMap?.(map); });
 </script>
 </html>
